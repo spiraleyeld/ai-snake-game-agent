@@ -71,6 +71,10 @@ export class AgentController {
   private movesFromCurrentPlan: number = 0;
   private _paused: boolean = false;
 
+  // Failed strategy capture for optimization
+  private failedStrategy: ActiveStrategy | null = null;
+  private failureReason: string | null = null;
+
   constructor(config?: Partial<AgentConfig>, callbacks?: AgentCallbacks) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.client = new LmStudioClient(this.config.lmStudioUrl, this.config.modelName);
@@ -217,6 +221,8 @@ export class AgentController {
               this.recordStrategyState(head, state);
 
               if (this.detectLoop()) {
+                this.failedStrategy = this.activeStrategy ? { ...this.activeStrategy } : null;
+                this.failureReason = 'LOOP_DETECTED';
                 this.resetLoopHistory();
                 this.stepsSinceLastScore = 0;
                 this.activeStrategy = null;
@@ -226,10 +232,11 @@ export class AgentController {
             // Progress watchdog: stagnation detection
             const progressStagnated = this.updateProgressTracking(state, newState);
             if (progressStagnated) {
+              this.failedStrategy = this.activeStrategy ? { ...this.activeStrategy } : null;
+              this.failureReason = 'STAGNATION_DETECTED';
               this.activeStrategy = null;
               this.resetProgressTracking();
               this.resetLoopHistory();
-              return false;
             }
           }
 
@@ -247,6 +254,14 @@ export class AgentController {
         this.stepsSinceLastScore = 0;
         this.activeStrategy = null;
         this.resetProgressTracking();
+      }
+    }
+
+    // Optimization: try to recover from failed strategy before Qwen fallback
+    if (this.failedStrategy) {
+      const optimized = await this.optimizeStrategy(state);
+      if (optimized) {
+        return false;
       }
     }
 
@@ -514,6 +529,8 @@ export class AgentController {
     this.movesFromCurrentPlan = 0;
     this.resetLoopHistory();
     this.resetProgressTracking();
+    this.failedStrategy = null;
+    this.failureReason = null;
     this.currentInfo = this.getDefaultInfo();
     this.updateUI();
   }
@@ -611,6 +628,62 @@ export class AgentController {
     }
 
     return false;
+  }
+
+  private async optimizeStrategy(state: GameSnapshot): Promise<boolean> {
+    const failed = this.failedStrategy;
+    if (!failed) return false;
+
+    const head = state.snake[0];
+    const snakeLength = state.snake.length;
+
+    let prompt = `Your SAFE_CHASE strategy stagnated/looped. Adjust ONLY the weights below, do NOT change moves or directions.\n\nFailed params:\nfoodWeight: ${failed.params.foodWeight}\nopenSpaceWeight: ${failed.params.openSpaceWeight}\nwallPenalty: ${failed.params.wallPenalty}\nbodyPenalty: ${failed.params.bodyPenalty}\n\nBoard state:\nHead: (${head.x}, ${head.y})\nDirection: ${state.direction}\nScore: ${state.score}\nSnake length: ${snakeLength}\n`;
+
+    if (state.food) {
+      prompt += `Food: (${state.food.x}, ${state.food.y})\n`;
+    }
+
+    if (this.failureReason) {
+      prompt += `\nFailure reason: ${this.failureReason}`;
+    }
+
+    prompt += `\n\nRespond with compact JSON only:\n{"policy":"SAFE_CHASE","params":{"foodWeight":1.0,"openSpaceWeight":0.4,"wallPenalty":0.3,"bodyPenalty":0.8},"reason":"short explanation"}`;
+
+    this.setStatus('thinking');
+    this.currentInfo.thinking = '';
+    this.updateUI();
+
+    const startTime = performance.now();
+    this.llmCallsCount++;
+
+    const response = await this.client.getStrategyUpdate(prompt, (latestThinking: string) => {
+      this.currentInfo.thinking = latestThinking;
+      this.updateUI();
+    });
+
+    const endTime = performance.now();
+    const latencyMs = Math.round(endTime - startTime);
+
+    if (response && response.policy === 'SAFE_CHASE' && response.params) {
+      this.activeStrategy = {
+        policy: 'SAFE_CHASE',
+        params: response.params,
+        startedAtStep: this.steps,
+      };
+      this.resetLoopHistory();
+      this.resetProgressTracking();
+      this.failedStrategy = null;
+      this.failureReason = null;
+
+      this.currentInfo.llmCalls = this.llmCallsCount;
+      this.currentInfo.lastLlmLatency = latencyMs;
+      this.updateUI();
+      return true;
+    } else {
+      this.failedStrategy = null;
+      this.failureReason = null;
+      return false;
+    }
   }
 
   private buildPrompt(state: GameSnapshot): string {
