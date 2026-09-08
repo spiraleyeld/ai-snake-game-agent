@@ -179,7 +179,7 @@ export class Renderer {
       this.drawTitle();
       ctx.font = 'bold 28px "Courier New", monospace';
       ctx.fillStyle = COLORS.accent;
-      ctx.fillText('Press ENTER to Start', w / 2, h / 2 + 50);
+      ctx.fillText('WAITING FOR AGENT', w / 2, h / 2 + 50);
 
       ctx.font = '14px "Courier New", monospace';
       ctx.fillStyle = COLORS.textSecondary;

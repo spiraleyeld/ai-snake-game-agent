@@ -98,8 +98,7 @@ export class AgentPanel {
       </div>
 
       <div class="section section-actions">
-        <div id="btn-mode-player" class="action-btn action-btn-player">PLAYER</div>
-        <div id="btn-agent-ctrl" class="action-btn action-btn-agent">AGENT</div>
+        <div id="btn-agent-ctrl" class="action-btn action-btn-agent">START AGENT</div>
         <div id="btn-pause-resume" class="action-btn action-btn-pause" style="display:none;">PAUSE</div>
       </div>
     `;
@@ -112,7 +111,6 @@ export class AgentPanel {
     if (!this.panelEl) return;
 
     this.btnAgentEl = this.panelEl.querySelector('#btn-agent-ctrl') as HTMLDivElement;
-    const btnPlayer = this.panelEl.querySelector('#btn-mode-player') as HTMLDivElement;
     this.btnPauseResumeEl = this.panelEl.querySelector('#btn-pause-resume') as HTMLDivElement;
 
     this.btnAgentEl.addEventListener('click', async () => {
@@ -128,9 +126,8 @@ export class AgentPanel {
       const connected = await this.controller?.startGame();
 
       if (connected) {
-        btnPlayer.classList.remove('active');
         this.btnAgentEl.classList.add('active');
-        this.btnAgentEl.textContent = 'AGENT active';
+        this.btnAgentEl.textContent = 'AGENT ACTIVE';
         this.btnPauseResumeEl.style.display = '';
         this.btnPauseResumeEl.textContent = 'PAUSE';
         this.loopRunning = true;
@@ -139,7 +136,7 @@ export class AgentPanel {
         this.runLoop();
       } else {
         this.btnAgentEl.classList.remove('disabled');
-        this.btnAgentEl.textContent = 'AGENT';
+        this.btnAgentEl.textContent = 'RESTART AGENT';
       }
     });
 
@@ -148,33 +145,15 @@ export class AgentPanel {
         clearTimeout(this.loopTimer ?? undefined);
         this.loopTimer = null;
         this.syncPauseState(true);
-        this.btnAgentEl!.textContent = 'AGENT active';
+        this.btnAgentEl!.textContent = 'AGENT ACTIVE';
         this.btnPauseResumeEl!.textContent = 'RESUME';
       } else if (this.loopRunning && this.paused) {
         this.paused = false;
         this.syncPauseState(false);
-        this.btnAgentEl!.textContent = 'AGENT active';
+        this.btnAgentEl!.textContent = 'AGENT ACTIVE';
         this.btnPauseResumeEl!.textContent = 'PAUSE';
         this.runLoop();
       }
-    });
-
-    btnPlayer.addEventListener('click', () => {
-      if (this.controller) {
-        this.controller.stop();
-      }
-      this.loopRunning = false;
-      this.paused = false;
-      this.syncPauseState(false);
-      if (this.loopTimer) {
-        clearTimeout(this.loopTimer);
-        this.loopTimer = null;
-      }
-      this.btnAgentEl!.classList.remove('active');
-      this.btnAgentEl!.textContent = 'AGENT';
-      this.btnAgentEl!.classList.remove('disabled');
-      this.btnPauseResumeEl!.style.display = 'none';
-      btnPlayer.classList.add('active');
     });
 
     const speedBtns = this.panelEl.querySelectorAll('.speed-btn') as NodeListOf<HTMLButtonElement>;
@@ -202,7 +181,7 @@ export class AgentPanel {
         this.loopRunning = false;
         this.paused = false;
         this.btnAgentEl!.classList.remove('active');
-        this.btnAgentEl!.textContent = 'AGENT';
+        this.btnAgentEl!.textContent = 'RESTART AGENT';
         this.btnAgentEl!.classList.remove('disabled');
         this.btnPauseResumeEl!.style.display = 'none';
         return;
@@ -291,7 +270,7 @@ export class AgentPanel {
       } else if (info.status === 'thinking') {
         planEl.textContent = '\u231B thinking...';
       } else if (info.planLength > 0 && info.planRemaining === 0) {
-        planEl.textContent = '\u274c queue empty';
+        planEl.textContent = 'Awaiting next plan';
       } else {
         planEl.textContent = '-';
       }
