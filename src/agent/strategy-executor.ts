@@ -11,7 +11,8 @@ export function nextMove(
   currentDirection: Direction,
   strategy: ActiveStrategy,
   cols: number,
-  rows: number
+  rows: number,
+  recentHeadPositions: { x: number; y: number }[] = []
 ): Direction | null {
 
   const legal = getLegalMoves(headX, headY, cols, rows, currentDirection, snakeBody);
@@ -35,7 +36,8 @@ export function nextMove(
   const score = evaluateScore(
     nx, ny, headX, headY,
     snakeBody, foodX, foodY,
-    params, cols, rows
+    params, cols, rows,
+    recentHeadPositions
   );
 
     if (score > bestScore) {
@@ -57,7 +59,8 @@ function evaluateScore(
   snakeBody: { x: number; y: number }[],
   foodX: number | null, foodY: number | null,
   params: ActiveStrategy['params'],
-  cols: number, rows: number
+  cols: number, rows: number,
+  recentHeadPositions: { x: number; y: number }[] = []
 ): number {
 
   let score = 0;
@@ -89,6 +92,18 @@ function evaluateScore(
   }
   const bodyRisk = minBodyDist !== Infinity ? 1 / minBodyDist : 0;
   score -= bodyRisk * params.bodyPenalty;
+
+  // Revisit penalty: penalize cells recently visited by snake head
+  if (recentHeadPositions.length > 0 && params.recentVisitPenalty !== undefined && params.recentVisitPenalty > 0) {
+    for (let i = 0; i < recentHeadPositions.length; i++) {
+      const pos = recentHeadPositions[i];
+      if (pos.x === nx && pos.y === ny) {
+        // newer visits (higher index) penalize more
+        const recencyWeight = 1 + (i / recentHeadPositions.length);
+        score -= params.recentVisitPenalty * recencyWeight;
+      }
+    }
+  }
 
   return score;
 }

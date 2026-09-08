@@ -328,11 +328,14 @@ export class LmStudioClient {
         const openSpaceWeight = params.openSpaceWeight;
         const wallPenalty = params.wallPenalty;
         const bodyPenalty = params.bodyPenalty;
+        const recentVisitPenalty = params.recentVisitPenalty;
 
         if (typeof foodWeight !== 'number' || typeof openSpaceWeight !== 'number') return null;
         if (typeof wallPenalty !== 'number' || typeof bodyPenalty !== 'number') return null;
+        if (typeof recentVisitPenalty !== 'number') return null;
         if (!isFinite(foodWeight) || !isFinite(openSpaceWeight)) return null;
         if (!isFinite(wallPenalty) || !isFinite(bodyPenalty)) return null;
+        if (!isFinite(recentVisitPenalty)) return null;
 
         const clamp = (v: number) => Math.max(0.0, Math.min(2.0, v));
 
@@ -341,6 +344,7 @@ export class LmStudioClient {
           openSpaceWeight: clamp(openSpaceWeight),
           wallPenalty: clamp(wallPenalty),
           bodyPenalty: clamp(bodyPenalty),
+          recentVisitPenalty: clamp(recentVisitPenalty),
         };
 
         const reason = typeof parsed.reason === 'string' ? parsed.reason.trim() : '';

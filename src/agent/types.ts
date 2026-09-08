@@ -79,6 +79,7 @@ export interface ActiveStrategyParams {
   openSpaceWeight: number;
   wallPenalty: number;
   bodyPenalty: number;
+  recentVisitPenalty: number;
 }
 
 export interface ActiveStrategy {

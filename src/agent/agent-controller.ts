@@ -60,6 +60,9 @@ export class AgentController {
   private lastLoopScore: number = -1;
   private stepsSinceLastScore: number = 0;
 
+  // Recent head position history for SAFE_CHASE stagnation escaping
+  private recentHeadPositions: { x: number; y: number }[] = [];
+
   // Progress watchdog for stagnation detection
   private progressFoodTarget: { x: number; y: number } | null = null;
   private bestFoodDistance: number = Infinity;
@@ -124,6 +127,7 @@ export class AgentController {
         openSpaceWeight: 0.4,
         wallPenalty: 0.3,
         bodyPenalty: 0.8,
+        recentVisitPenalty: 0.0,
       },
       startedAtStep: 0,
     };
@@ -155,6 +159,7 @@ export class AgentController {
     this.memory.resetForNewGame();
     this.resetLoopHistory();
     this.resetProgressTracking();
+    this.recentHeadPositions = [];
     this.engine.start();
     this.engine.setManualMode(true);
     this.setStatus('playing');
@@ -197,7 +202,8 @@ export class AgentController {
         state.direction,
         this.activeStrategy,
         COLS,
-        ROWS
+        ROWS,
+        this.recentHeadPositions
       );
 
       if (candidate !== null) {
@@ -210,33 +216,42 @@ export class AgentController {
           const moved = this.executeStrategyMove(candidate, state);
 
           if (moved && this.activeStrategy) {
-            const newState = this.getCurrentState();
-            const scoreIncreased = newState ? state.score < newState.score : false;
+            // Record head position after successful movement
+            const newStateAfterMove = this.getCurrentState();
+            if (newStateAfterMove) {
+              const newHead = newStateAfterMove.snake[0];
+              this.recentHeadPositions.push({ x: newHead.x, y: newHead.y });
+              while (this.recentHeadPositions.length > 32) {
+                this.recentHeadPositions.shift();
+              }
 
-            if (scoreIncreased || this.lastLoopScore === -1) {
-              this.resetLoopHistory();
-              this.stepsSinceLastScore = 0;
-            } else {
-              this.stepsSinceLastScore++;
-              this.recordStrategyState(head, state);
+              const scoreIncreased = state.score < newStateAfterMove.score;
 
-              if (this.detectLoop()) {
-                this.failedStrategy = this.activeStrategy ? { ...this.activeStrategy } : null;
-                this.failureReason = 'LOOP_DETECTED';
+              if (scoreIncreased || this.lastLoopScore === -1) {
                 this.resetLoopHistory();
                 this.stepsSinceLastScore = 0;
-                this.activeStrategy = null;
-              }
-            }
+              } else {
+                this.stepsSinceLastScore++;
+                this.recordStrategyState(head, state);
 
-            // Progress watchdog: stagnation detection
-            const progressStagnated = this.updateProgressTracking(state, newState);
-            if (progressStagnated) {
-              this.failedStrategy = this.activeStrategy ? { ...this.activeStrategy } : null;
-              this.failureReason = 'STAGNATION_DETECTED';
-              this.activeStrategy = null;
-              this.resetProgressTracking();
-              this.resetLoopHistory();
+                if (this.detectLoop()) {
+                  this.failedStrategy = this.activeStrategy ? { ...this.activeStrategy } : null;
+                  this.failureReason = 'LOOP_DETECTED';
+                  this.resetLoopHistory();
+                  this.stepsSinceLastScore = 0;
+                  this.activeStrategy = null;
+                }
+              }
+
+              // Progress watchdog: stagnation detection
+              const progressStagnated = this.updateProgressTracking(state, newStateAfterMove);
+              if (progressStagnated) {
+                this.failedStrategy = this.activeStrategy ? { ...this.activeStrategy } : null;
+                this.failureReason = 'STAGNATION_DETECTED';
+                this.activeStrategy = null;
+                this.resetProgressTracking();
+                this.resetLoopHistory();
+              }
             }
           }
 
@@ -531,6 +546,7 @@ export class AgentController {
     this.resetProgressTracking();
     this.failedStrategy = null;
     this.failureReason = null;
+    this.recentHeadPositions = [];
     this.currentInfo = this.getDefaultInfo();
     this.updateUI();
   }
@@ -637,7 +653,7 @@ export class AgentController {
     const head = state.snake[0];
     const snakeLength = state.snake.length;
 
-    let prompt = `Your SAFE_CHASE strategy stagnated/looped. Adjust ONLY the weights below, do NOT change moves or directions.\n\nFailed params:\nfoodWeight: ${failed.params.foodWeight}\nopenSpaceWeight: ${failed.params.openSpaceWeight}\nwallPenalty: ${failed.params.wallPenalty}\nbodyPenalty: ${failed.params.bodyPenalty}\n\nBoard state:\nHead: (${head.x}, ${head.y})\nDirection: ${state.direction}\nScore: ${state.score}\nSnake length: ${snakeLength}\n`;
+    let prompt = `Your SAFE_CHASE strategy stagnated/looped. Adjust ONLY the weights below, do NOT change moves or directions.\n\nFailed params:\nfoodWeight: ${failed.params.foodWeight}\nopenSpaceWeight: ${failed.params.openSpaceWeight}\nwallPenalty: ${failed.params.wallPenalty}\nbodyPenalty: ${failed.params.bodyPenalty}\nrecentVisitPenalty: ${failed.params.recentVisitPenalty}\n\nrecentVisitPenalty penalizes recently visited head cells. Higher values help escape repeated local loops.\n\nBoard state:\nHead: (${head.x}, ${head.y})\nDirection: ${state.direction}\nScore: ${state.score}\nSnake length: ${snakeLength}\n`;
 
     if (state.food) {
       prompt += `Food: (${state.food.x}, ${state.food.y})\n`;
@@ -647,7 +663,7 @@ export class AgentController {
       prompt += `\nFailure reason: ${this.failureReason}`;
     }
 
-    prompt += `\n\nRespond with compact JSON only:\n{"policy":"SAFE_CHASE","params":{"foodWeight":1.0,"openSpaceWeight":0.4,"wallPenalty":0.3,"bodyPenalty":0.8},"reason":"short explanation"}`;
+    prompt += `\n\nRespond with compact JSON only:\n{"policy":"SAFE_CHASE","params":{"foodWeight":1.0,"openSpaceWeight":0.4,"wallPenalty":0.3,"bodyPenalty":0.8,"recentVisitPenalty":0.0},"reason":"short explanation"}`;
 
     this.setStatus('thinking');
     this.currentInfo.thinking = '';
