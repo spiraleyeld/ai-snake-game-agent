@@ -32,6 +32,14 @@ export interface AgentInfo {
   movesPerLlm: number;
   lastLlmLatency: number;
   thinking: string;
+  stagnationSteps: number;
+  foodDistanceRatio: string;
+  recentUniqueRatio: string;
+  lastTrigger: string;
+  snapshotStepsSinceProgress: number | null;
+  snapshotFoodDistCurrent: number | null;
+  snapshotFoodDistBest: number | null;
+  snapshotRecentUnique: number | null;
 }
 
 export class AgentController {
@@ -78,6 +86,9 @@ export class AgentController {
   private failedStrategy: ActiveStrategy | null = null;
   private failureReason: string | null = null;
 
+  // Last trigger reason (persisted, not cleared after optimization)
+  private _lastTrigger: string = '-';
+
   constructor(config?: Partial<AgentConfig>, callbacks?: AgentCallbacks) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.client = new LmStudioClient(this.config.lmStudioUrl, this.config.modelName);
@@ -105,6 +116,14 @@ export class AgentController {
       movesPerLlm: 0,
       lastLlmLatency: 0,
       thinking: '',
+      stagnationSteps: 0,
+      foodDistanceRatio: '-',
+      recentUniqueRatio: '-',
+      lastTrigger: '-',
+      snapshotStepsSinceProgress: null,
+      snapshotFoodDistCurrent: null,
+      snapshotFoodDistBest: null,
+      snapshotRecentUnique: null,
     };
   }
 
@@ -141,6 +160,21 @@ export class AgentController {
   get agentStatus(): AgentStatus { return this._agentStatus; }
   get info(): AgentInfo { return { ...this.currentInfo }; }
   get memoryData() { return this.memory.data; }
+
+  // Diagnostic getters for agent-panel telemetry display
+  get stagnationSteps(): number { return this.stepsSinceProgress; }
+  get bestFoodDistValue(): number { return this.bestFoodDistance; }
+  get recentHeadPositionsLength(): number { return this.recentHeadPositions.length; }
+  get lastTrigger(): string { return this._lastTrigger; }
+
+  // Compute unique head count from recentHeadPositions for telemetry
+  getRecentUniqueCount(): number {
+    const seen = new Set<string>();
+    for (const p of this.recentHeadPositions) {
+      seen.add(`${p.x},${p.y}`);
+    }
+    return seen.size;
+  }
 
   async startGame(): Promise<boolean> {
     if (!this.engine) return false;
@@ -235,8 +269,10 @@ export class AgentController {
                 this.recordStrategyState(head, state);
 
                 if (this.detectLoop()) {
+                  this._lastTrigger = 'LOOP_DETECTED';
                   this.failedStrategy = this.activeStrategy ? { ...this.activeStrategy } : null;
                   this.failureReason = 'LOOP_DETECTED';
+                  this.captureTriggerSnapshot();
                   this.resetLoopHistory();
                   this.stepsSinceLastScore = 0;
                   this.activeStrategy = null;
@@ -246,8 +282,10 @@ export class AgentController {
               // Progress watchdog: stagnation detection
               const progressStagnated = this.updateProgressTracking(state, newStateAfterMove);
               if (progressStagnated) {
+                this._lastTrigger = 'STAGNATION_DETECTED';
                 this.failedStrategy = this.activeStrategy ? { ...this.activeStrategy } : null;
                 this.failureReason = 'STAGNATION_DETECTED';
+                this.captureTriggerSnapshot();
                 this.activeStrategy = null;
                 this.resetProgressTracking();
                 this.resetLoopHistory();
@@ -562,6 +600,21 @@ export class AgentController {
     this.lastLoopScore = -1;
   }
 
+  private captureTriggerSnapshot(): void {
+    const uniqueCount = this.getRecentUniqueCount();
+    const histLen = this.recentHeadPositions.length;
+    const state = this.getCurrentState();
+    let currentDist: number | null = null;
+    if (state && state.food) {
+      const head = state.snake[0];
+      currentDist = Math.abs(state.food.x - head.x) + Math.abs(state.food.y - head.y);
+    }
+    this.currentInfo.snapshotStepsSinceProgress = this.stepsSinceProgress;
+    this.currentInfo.snapshotFoodDistCurrent = currentDist;
+    this.currentInfo.snapshotFoodDistBest = this.bestFoodDistance < Infinity ? Math.round(this.bestFoodDistance) : null;
+    this.currentInfo.snapshotRecentUnique = histLen > 0 ? uniqueCount : null;
+  }
+
   private computeStateSignature(head: { x: number; y: number }, direction: Direction, food: { x: number; y: number } | null, score: number): string {
     return `${head.x},${head.y},${direction},${food ? food.x : -1},${food ? food.y : -1},${score}`;
   }
@@ -788,7 +841,29 @@ export class AgentController {
   }
 
   private updateUI(): void {
+    // Populate diagnostic telemetry fields
+    this.currentInfo.stagnationSteps = this.stepsSinceProgress;
+
+    const foodDistRatio = this.bestFoodDistance < Infinity
+      ? `${this.getBestFoodDistanceDisplay()}`
+      : '-';
+    this.currentInfo.foodDistanceRatio = foodDistRatio;
+
+    const uniqueCount = this.getRecentUniqueCount();
+    const histLen = this.recentHeadPositions.length;
+    this.currentInfo.recentUniqueRatio = histLen > 0 ? `${uniqueCount} / ${histLen}` : '-';
+
+    this.currentInfo.lastTrigger = this._lastTrigger;
+
     this.callbacks.onUpdate?.({ ...this.currentInfo });
+  }
+
+  private getBestFoodDistanceDisplay(): string {
+    const state = this.getCurrentState();
+    if (!state || !state.food) return `${Math.round(this.bestFoodDistance)} / -`;
+    const head = state.snake[0];
+    const currentDist = Math.abs(state.food.x - head.x) + Math.abs(state.food.y - head.y);
+    return `${currentDist} / ${Math.round(this.bestFoodDistance)}`;
   }
 }
 

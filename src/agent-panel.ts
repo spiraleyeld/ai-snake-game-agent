@@ -9,6 +9,7 @@ const SPEEDS = [
 
 export class AgentPanel {
   private panelEl: HTMLDivElement | null = null;
+  private thinkingPanelEl: HTMLDivElement | null = null;
   private controller: AgentController | null = null;
   private loopRunning = false;
   private paused = false;
@@ -16,12 +17,22 @@ export class AgentPanel {
   private btnAgentEl: HTMLDivElement | null = null;
   private btnPauseResumeEl: HTMLDivElement | null = null;
   private loopInFlight = false;
+  private hasReceivedThinking = false;
 
 
   init(controller: AgentController): void {
     this.controller = controller;
     this.createPanel();
+    this.createThinkingPanel();
     this.bindEvents();
+    this.subscribeToUpdates();
+  }
+
+  private subscribeToUpdates(): void {
+    if (!this.controller) return;
+    this.controller.setOnUpdate((info: AgentInfo) => {
+      this.updateDisplay(info);
+    });
   }
 
   private syncPauseState(value: boolean): void {
@@ -79,6 +90,16 @@ export class AgentPanel {
       </div>
 
       <div class="section">
+        <h4 class="section-title">DIAGNOSTICS</h4>
+        <div class="stats-grid">
+          <div class="stat-row"><span class="label">Last Trigger</span><span id="info-last-trigger" class="value trigger-val">-</span></div>
+          <div class="stat-row"><span class="label">No Progress</span><span id="info-stagnation" class="value stagnation-val">0</span></div>
+          <div class="stat-row"><span class="label">Food Dist</span><span id="info-food-dist" class="value dist-val">-</span></div>
+          <div class="stat-row"><span class="label">Unique Heads</span><span id="info-unique-heads" class="value unique-val">-</span></div>
+        </div>
+      </div>
+
+      <div class="section">
         <h4 class="section-title">STRATEGY</h4>
         <div id="strategy-box" class="strategy-box">
           <span id="info-strategy" class="strategy-text">-</span>
@@ -104,6 +125,27 @@ export class AgentPanel {
     `;
 
     this.panelEl = panel;
+    document.body.appendChild(panel);
+  }
+
+  private createThinkingPanel(): void {
+    const panel = document.createElement('div');
+    panel.id = 'thinking-panel';
+    panel.innerHTML = `
+      <div class="panel-header">
+        <span class="panel-title">AGENT THINKING</span>
+      </div>
+
+      <div id="thinking-content" class="thinking-box">
+        <span id="info-thinking" class="thinking-text">Waiting for Qwen reasoning...</span>
+      </div>
+
+      <div class="telemetry-row">
+        <span class="label">Last LLM</span><span id="info-last-llm-think" class="value">-</span>
+      </div>
+    `;
+
+    this.thinkingPanelEl = panel;
     document.body.appendChild(panel);
   }
 
@@ -288,6 +330,25 @@ export class AgentPanel {
     setTelemetry('info-moves-llm', `${info.movesPerLlm} / ${info.planLength}`);
     setTelemetry('info-last-llm', info.lastLlmLatency > 0 ? `${info.lastLlmLatency} ms` : '-');
 
+    // Diagnostic telemetry wiring (snapshot at trigger time)
+    setTelemetry('info-last-trigger', info.lastTrigger);
+
+    const stagnationVal = info.snapshotStepsSinceProgress !== null ? String(info.snapshotStepsSinceProgress) : String(info.stagnationSteps);
+    setTelemetry('info-stagnation', stagnationVal);
+
+    if (info.snapshotFoodDistCurrent !== null && info.snapshotFoodDistBest !== null) {
+      setTelemetry('info-food-dist', `${info.snapshotFoodDistCurrent} / ${info.snapshotFoodDistBest}`);
+    } else {
+      setTelemetry('info-food-dist', info.foodDistanceRatio);
+    }
+
+    if (info.snapshotRecentUnique !== null) {
+      const histLen = info.recentUniqueRatio.includes('/') ? parseInt(info.recentUniqueRatio.split('/')[1].trim(), 10) : 0;
+      setTelemetry('info-unique-heads', `${info.snapshotRecentUnique} / ${histLen}`);
+    } else {
+      setTelemetry('info-unique-heads', info.recentUniqueRatio);
+    }
+
     // Direction arrow display
     const dirEl = this.panelEl?.querySelector('#info-dir') as HTMLElement;
     if (dirEl) {
@@ -329,13 +390,45 @@ export class AgentPanel {
     } else if (btnAgent && info.status === 'game-over') {
       // Handled by runLoop cleanup
     }
+
+    // Update thinking panel
+    const thinkingEl = this.thinkingPanelEl?.querySelector('#info-thinking') as HTMLElement | null;
+    const thinkingBox = this.thinkingPanelEl?.querySelector('.thinking-box') as HTMLElement | null;
+
+    if (thinkingEl) {
+      if (info.thinking && info.thinking.length > 0) {
+        this.hasReceivedThinking = true;
+        thinkingEl.textContent = info.thinking;
+      } else if (!this.hasReceivedThinking) {
+        thinkingEl.textContent = 'Waiting for Qwen reasoning...';
+      }
+    }
+
+    // Scroll behavior: reset on first non-empty of new cycle, auto-follow during streaming
+    if (thinkingBox && info.thinking && info.thinking.length > 0) {
+      thinkingBox.scrollTop = 0;
+      thinkingBox.scrollTop = thinkingBox.scrollHeight;
+    } else if (!this.hasReceivedThinking && thinkingBox) {
+      thinkingBox.scrollTop = 0;
+    }
+
+    const lastLlmThinkEl = this.thinkingPanelEl?.querySelector('#info-last-llm-think') as HTMLElement | null;
+    if (lastLlmThinkEl) {
+      lastLlmThinkEl.textContent = info.lastLlmLatency > 0 ? `${info.lastLlmLatency} ms` : '-';
+    }
   }
 
   destroy(): void {
     this.loopRunning = false;
     if (this.loopTimer) clearTimeout(this.loopTimer);
+    if (this.controller) {
+      this.controller.setOnUpdate(undefined);
+    }
     if (this.panelEl && this.panelEl.parentNode) {
       this.panelEl.parentNode.removeChild(this.panelEl);
+    }
+    if (this.thinkingPanelEl && this.thinkingPanelEl.parentNode) {
+      this.thinkingPanelEl.parentNode.removeChild(this.thinkingPanelEl);
     }
   }
 }
