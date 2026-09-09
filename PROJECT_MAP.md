@@ -1,9 +1,8 @@
 # PROJECT_MAP — Snake Game + Local Qwen Agent
 
-> Reconciled against current local working-tree / runtime evidence through 2026-09-09.
-> Latest pushed documentation checkpoint: `407b19c`.
-> Latest pushed source checkpoint: `fec2ee4`.
-> Current local working tree is newer and contains uncheckpointed CREATE_SPACE, fixed-policy benchmark, recovery-benchmark, and Qwen strategy-integration changes.
+> Reconciled against GitHub `main`, current local source, and runtime evidence through 2026-09-09.
+> Latest pushed architecture checkpoint: `af1d924` — `feat: add create-space strategy and recovery benchmarking`.
+> GitHub `main` now includes CREATE_SPACE, fixed-policy benchmarking, recovery benchmarking, Qwen CREATE_SPACE integration, and this renewed PROJECT_MAP.
 > Purpose: fast onboarding for fresh OpenCode / ChatGPT sessions without broad repository rediscovery.
 
 ## 0. Authority
@@ -25,7 +24,6 @@ CURRENT LOCAL RUNTIME EVIDENCE
 - Do not infer runtime behavior from legacy duplicate files.
 - Cosmetic CSS-only work usually does not require an architecture-map update.
 - Absence from GitHub does not prove absence from the local working tree.
-- Current local source is newer than the latest pushed GitHub source checkpoint.
 
 ---
 
@@ -118,21 +116,13 @@ Do not edit, delete, stage, or adopt them into the formal architecture as a side
 
 ## 2. Git Snapshot / Safety
 
-Latest pushed documentation checkpoint:
+Current pushed architecture checkpoint:
 
 ```text
-407b19c docs: renew project map for 32x12 runtime
+af1d924 feat: add create-space strategy and recovery benchmarking
 ```
 
-Latest pushed source checkpoint:
-
-```text
-fec2ee4 feat: use half-height board and align runtime UI
-```
-
-Current local working tree is newer than that pushed source checkpoint.
-
-Meaningful local architecture changes accumulated after `fec2ee4` include:
+This checkpoint includes:
 
 ```text
 CREATE_SPACE deterministic local policy
@@ -141,11 +131,18 @@ fixed-policy runLocalBenchmark(policy?)
 runRecoveryBenchmark()
 debug API / global type updates
 Qwen CREATE_SPACE prompt / validation / controller assignment
+renewed PROJECT_MAP
 ```
 
-Therefore:
+GitHub `main` and this PROJECT_MAP now describe the same architecture checkpoint.
 
-> `fec2ee4` remains the latest pushed source checkpoint, but it is no longer a complete description of current local runtime behavior.
+The previous source checkpoint:
+
+```text
+fec2ee4 feat: use half-height board and align runtime UI
+```
+
+remains historically important because it introduced the current 32×12 runtime geometry.
 
 Major source-state changes represented by `fec2ee4` include:
 
@@ -189,7 +186,7 @@ origin/main → https://github.com/spiraleyeld/ai-snake-game-agent
 
 Important:
 
-> GitHub `main` is only the latest pushed checkpoint. Current local source is newer.
+> GitHub `main` is the latest pushed checkpoint. Current local source may become newer again after future uncommitted work.
 
 Before relying on GitHub-only absence/presence for local-file decisions, obtain:
 
@@ -2641,15 +2638,15 @@ GameEngine = physical state
 ## 31. High-Confidence Anchors
 
 ```text
-Latest pushed source checkpoint:
-                          fec2ee4
+Current pushed architecture checkpoint:
+                          af1d924
 
-Latest pushed docs checkpoint:
-                          407b19c
-
-Current local working tree:
-                          newer than pushed source
-                          contains uncheckpointed architecture changes
+GitHub main:
+                          includes CREATE_SPACE
+                          fixed-policy benchmark
+                          recovery benchmark
+                          Qwen CREATE_SPACE integration
+                          renewed PROJECT_MAP
 
 Entry:
                           src/main.ts
