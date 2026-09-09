@@ -9,7 +9,7 @@ import { AgentPanel } from './agent-panel.js';
 import './style.css';
 
 const CANVAS_WIDTH = 640;
-const CANVAS_HEIGHT = 480;
+const CANVAS_HEIGHT = 240;
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 canvas.width = CANVAS_WIDTH;

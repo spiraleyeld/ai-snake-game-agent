@@ -114,7 +114,7 @@ export class AgentPanel {
       <div class="section">
         <h4 class="section-title">SPEED</h4>
         <div class="speed-selector">
-          ${SPEEDS.map(s => `<button class="speed-btn${s.value === 1 ? ' active' : ''}" data-speed="${s.value}">${s.label}</button>`).join('')}
+          ${SPEEDS.map(s => `<button class="speed-btn${s.value === 4 ? ' active' : ''}" data-speed="${s.value}">${s.label}</button>`).join('')}
         </div>
       </div>
 

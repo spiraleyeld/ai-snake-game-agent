@@ -13,7 +13,7 @@ import { assessDanger } from './danger-monitor.js';
 export type StagnationMode = 'FIXED' | 'DYNAMIC';
 
 const COLS = 32;
-const ROWS = 24;
+const ROWS = 12;
 
 export interface AgentCallbacks {
   onStatusChange?: (status: AgentStatus) => void;
