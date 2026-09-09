@@ -90,6 +90,10 @@ export class AgentPanel {
           <div class="stat-row"><span class="label">Food Dist</span><span id="info-food-dist" class="value dist-val">-</span></div>
           <div class="stat-row"><span class="label">Unique Heads</span><span id="info-unique-heads" class="value unique-val">-</span></div>
           <div class="stat-row"><span class="label">Danger</span><span id="info-danger-level" class="value danger-val">-</span></div>
+          <div class="stat-row"><span class="label">Mobility Streak</span><span id="info-low-mob-streak" class="value streak-val">0</span></div>
+          <div class="stat-row"><span class="label">Max Mobility Streak</span><span id="info-max-mob-streak" class="value streak-val">0</span></div>
+          <div class="stat-row"><span class="label">Last Low Streak Before Dead End</span><span id="info-last-low-streak" class="value streak-val">0</span></div>
+          <div class="stat-row"><span class="label">Dead End Events</span><span id="info-dead-end-count" class="value streak-val">0</span></div>
           <div class="stat-row"><span class="label">Mobility</span><span id="info-mobility" class="value mobility-val">0 / 0</span></div>
           <div class="stat-row"><span class="label">Reachable</span><span id="info-reachable" class="value reachable-val">0</span></div>
         </div>
@@ -355,6 +359,12 @@ export class AgentPanel {
     setTelemetry('info-mobility', mobilityStr);
 
     setTelemetry('info-reachable', String(info.reachableCells));
+
+    // Danger episode telemetry
+    setTelemetry('info-low-mob-streak', String(info.currentLowMobilityStreak));
+    setTelemetry('info-max-mob-streak', String(info.maxLowMobilityStreak));
+    setTelemetry('info-last-low-streak', String(info.lastLowStreakBeforeDeadEnd));
+    setTelemetry('info-dead-end-count', String(info.deadEndEventCount));
 
     // Danger color coding
     const dangerEl = this.panelEl?.querySelector('#info-danger-level') as HTMLElement | null;

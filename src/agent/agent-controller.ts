@@ -211,9 +211,9 @@ export class AgentController {
   setSpeedMultiplier(_multiplier: number): void {
   }
 
-  private createDefaultSafeChaseStrategy(): ActiveStrategy {
+  private createDefaultStrategy(): ActiveStrategy {
     return {
-      policy: 'SAFE_CHASE',
+      policy: 'EAT_SAFE_FOOD',
       params: {
         foodWeight: 1.0,
         openSpaceWeight: 0.4,
@@ -254,7 +254,7 @@ export class AgentController {
     this.steps = 0;
     this.plannedMoves = [];
     this.lastFoodPos = null;
-    this.activeStrategy = this.createDefaultSafeChaseStrategy();
+    this.activeStrategy = this.createDefaultStrategy();
     this.memory.resetForNewGame();
     this.resetLoopHistory();
     this.resetProgressTracking();
