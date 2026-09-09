@@ -1,6 +1,6 @@
 # PROJECT_MAP — Snake Game + Local Qwen Agent
 
-> Reconciled against the uploaded current source snapshot on 2026-09-09.
+> Reconciled against GitHub `main` source plus the uploaded current PROJECT_MAP on 2026-09-09.
 > Purpose: fast onboarding for fresh OpenCode / ChatGPT sessions without broad repository rediscovery.
 
 ## 0. Authority
@@ -8,10 +8,11 @@
 Implementation truth:
 
 ```text
-CURRENT SOURCE CODE
-> git diff / git status
-> PROJECT_MAP.md
-> handoff / conversation summary
+CURRENT LOCAL SOURCE / RUNTIME EVIDENCE
+> local git diff / git status
+> latest GitHub main source
+> latest GitHub PROJECT_MAP.md
+> handoff / current conversation evidence
 > old assumptions
 ```
 
@@ -66,9 +67,9 @@ Desktop ratio:     2 : 6 : 2
 
 Desktop grid uses `minmax(0, 2fr) minmax(0, 6fr) minmax(0, 2fr)` so long Thinking content cannot expand its track and squeeze Control.
 
-### Legacy / duplicate files
+### Local-only legacy / duplicate risk
 
-Treat these as legacy / unreferenced unless the active import graph changes:
+These files are **not present on the current GitHub `main` branch**, but they were previously observed as local untracked/legacy files:
 
 ```text
 src/agent/AgentPanel.jsx
@@ -77,22 +78,34 @@ src/agent/LMStudioClient.ts
 src/agent/promptBuilder.ts
 ```
 
-Do not edit or delete them as a side effect of unrelated work.
+Absence from GitHub does **not** prove absence from `D:\Projects\snake-game`.
+If a task could touch these paths, check local `git status --short` / current imports first.
+
+Do not treat them as active runtime files unless the current local import graph proves otherwise, and do not edit/delete them as a side effect of unrelated work.
 
 ---
 
 ## 2. Git Snapshot / Safety
 
-Uploaded snapshot HEAD:
+Current GitHub `main` checkpoint:
 
 ```text
-2d95e8c chore: add strategy trigger diagnostics
-e625387 feat: add revisit-aware strategy execution
-0ee945e feat: optimize strategy on stagnation
-d7037c0 chore: checkpoint persistent strategy baseline
+d64b405 feat: checkpoint safe local planner and agent runtime
 ```
 
-The uploaded working tree contains many modified and untracked files, including core source files. `PROJECT_MAP.md` itself is untracked in the uploaded snapshot.
+Repository:
+
+```text
+origin/main → https://github.com/spiraleyeld/ai-snake-game-agent
+```
+
+`PROJECT_MAP.md` is tracked in that checkpoint.
+
+Important:
+
+> GitHub `main` is only the latest pushed checkpoint. Local `D:\Projects\snake-game` may contain newer modified or untracked files that GitHub cannot see.
+
+Before relying on GitHub-only absence/presence for local-file decisions, obtain local `git status --short` when the distinction matters.
 
 Before any Git action:
 
@@ -585,10 +598,14 @@ stepsSinceProgress >= _effectiveStagnationThreshold
 does the controller evaluate the current boundary evidence:
 
 ```text
-evaluateFoodPath(current post-move state)
-+ current Danger telemetry
+evaluateFoodPath(pre-move `state`)
++ Danger telemetry computed from that same pre-move tick
 → stagnationBudget(...)
 ```
+
+Important:
+
+> `updateProgressTracking(state, newStateAfterMove, ...)` is called after a successful move, but its distance checks and `evaluateFoodPath()` currently use the **pre-move `state`**. `newStateAfterMove` is used for score-increase detection, not for the boundary food-path evaluation.
 
 Pure budget categories are:
 
@@ -682,6 +699,12 @@ repeated DEAD_END ticks do not increment again
 ```
 
 These four values are exposed through `AgentInfo` / `updateUI()`.
+
+Lifecycle note:
+
+- `initializeLocalRun()` resets strategy/progress/loop state but does **not** clear these four episode counters.
+- Full controller `reset()` clears `currentLowMobilityStreak`, `maxLowMobilityStreak`, `lastLowStreakBeforeDeadEnd`, and `deadEndEventCount`.
+- Therefore these counters are controller-session telemetry unless a full reset occurs; do not assume each `startGame()` / benchmark initialization begins from zero.
 
 Current active AgentPanel displays:
 
@@ -845,6 +868,10 @@ runLocalBenchmark(seed, maxSteps)
 runSafeBfsBenchmark(seed, maxSteps)
 ```
 
+Runtime note:
+
+> `window.__snakeDebug.getAgentInfo()` returns the controller's richer runtime `AgentInfo`, but `src/global.d.ts` currently declares an older/narrower `AgentDebugInfo` shape and does not list all newer Thinking, stagnation, Danger, and episode-counter fields.
+
 `getState()` includes:
 
 ```text
@@ -886,7 +913,10 @@ For benchmark-console runs, use the debug benchmark entrypoint instead of pressi
 - calls `runStep(directionSource, 'FIXED')`
 - tracks safe-BFS usage and fallback reasons
 
-Both benchmark entrypoints intentionally preserve FIXED stagnation semantics at threshold 80 for baseline comparability.
+Benchmark stagnation semantics are **not identical**:
+
+- `runLocalBenchmark()` uses the normal ActiveStrategy lifecycle with `runStep(undefined, 'FIXED')`, so its stagnation watchdog preserves the fixed 80-step behavior.
+- `runSafeBfsBenchmark()` also passes `'FIXED'`, but because it supplies `directionSource`, `runStep()` takes the benchmark-injection branch and returns before normal LOOP/progress/stagnation tracking. Therefore SafeBFS does **not** generate new `STAGNATION_DETECTED` / `LOOP_DETECTED` events through that normal lifecycle.
 
 Benchmark termination reasons include:
 
@@ -986,6 +1016,7 @@ Current important limitations:
 3. **Danger is observational.** DEAD_END_IMMINENT may be detected when no survivable move already exists, and does not currently trigger Qwen.
 4. **PRESSURED=40 is provisional pure logic only.** Current runtime does not use it as an early trigger.
 5. **No dedicated survival fallback planner yet.** Unsafe food currently falls back to Greedy behavior in EAT_SAFE_FOOD.
+6. **Debug type declaration drift.** Runtime `getAgentInfo()` exposes more fields than the current `AgentDebugInfo` declaration in `src/global.d.ts`.
 
 Future policy names such as `CREATE_SPACE` / `FOLLOW_TAIL` must be marked FUTURE until real controller behavior exists.
 
@@ -1189,7 +1220,8 @@ Active UI:                src/agent-panel.ts + src/style.css
 Panel layout:             Thinking | Snake | Control = 2:6:2
 LM streaming:             reasoning_content + content SSE
 Normal stagnation mode:   DYNAMIC
-Benchmark stagnation:     FIXED = 80
+Local benchmark stagnation: FIXED = 80
+SafeBFS injection:         bypasses normal LOOP/progress/stagnation lifecycle
 Danger trigger Qwen:      NO
 PRESSURED=40 early use:   NO
 Debug API:                window.__snakeDebug
