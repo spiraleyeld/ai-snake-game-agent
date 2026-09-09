@@ -3,7 +3,7 @@
 > Current architecture/state map for fast onboarding.
 > Reconciled through 2026-09-10 against latest pushed GitHub checkpoint plus current local build evidence.
 > Latest pushed architecture source checkpoint: `93da94a`.
-> Latest pushed documentation alignment checkpoint: `640ad2b`.
+> Latest pushed documentation alignment checkpoint: `596f082`.
 > Detailed benchmark evidence lives in `BENCHMARK_NOTES.md`.
 > OpenCode workflow / Git / context rules live in `AGENTS.md`.
 
@@ -1429,7 +1429,7 @@ reachable-space LOW_MOBILITY episode drop
 
 ## 18. Local Benchmark Danger Telemetry
 
-Current local `LocalBenchmarkResult` exposes:
+Current `LocalBenchmarkResult` exposes:
 
 ```text
 maxLowMobilityStreak
@@ -1450,7 +1450,7 @@ Qwen trigger semantics
 benchmark termination semantics
 ```
 
-Current local wiring:
+Current wiring:
 
 ```text
 BUILD PASS
@@ -2002,7 +2002,7 @@ Latest pushed architecture source checkpoint:
 93da94a
 
 Latest pushed documentation checkpoint:
-640ad2b
+596f082
 
 Frontend:
 Vanilla TypeScript + Vite + Canvas 2D
@@ -2049,10 +2049,10 @@ pure single-tick assessment
 DangerEpisodeTracker:
 src/agent/danger-episode-tracker.ts
 cross-tick Danger episode state
-implemented locally
+implemented/pushed
 
 Reachable-drop telemetry:
-implemented locally
+implemented/pushed
 BUILD PASS
 runtime evidence pending
 
