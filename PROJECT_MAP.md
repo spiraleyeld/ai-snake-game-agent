@@ -87,11 +87,15 @@ Do not treat them as active runtime files unless the current local import graph 
 
 ## 2. Git Snapshot / Safety
 
-Current GitHub `main` checkpoint:
+Current source checkpoint:
 
 ```text
 d64b405 feat: checkpoint safe local planner and agent runtime
 ```
+`PROJECT_MAP.md` may have newer documentation-only commits on top of this source checkpoint.
+
+Use the current GitHub `main` HEAD / `git log` when the exact latest branch commit matters.
+
 
 Repository:
 
