@@ -1,6 +1,6 @@
 # PROJECT_MAP — Snake Game + Local Qwen Agent
 
-> Reconciled against GitHub `main` source plus the uploaded current PROJECT_MAP on 2026-09-09.
+> Reconciled against source checkpoint `5c52212`, current runtime evidence, and latest GitHub `main` on 2026-09-09.
 > Purpose: fast onboarding for fresh OpenCode / ChatGPT sessions without broad repository rediscovery.
 
 ## 0. Authority
@@ -90,8 +90,22 @@ Do not treat them as active runtime files unless the current local import graph 
 Current source checkpoint:
 
 ```text
-d64b405 feat: checkpoint safe local planner and agent runtime
+5c52212 feat: default to safe food and expose danger telemetry
 ```
+
+This checkpoint includes:
+
+```text
+src/agent/agent-controller.ts
+→ default ActiveStrategy = EAT_SAFE_FOOD
+→ createDefaultStrategy()
+→ normal START AGENT runtime verified EAT_SAFE_FOOD
+
+src/agent-panel.ts
+→ renders four Danger episode counters
+→ runtime UI verified
+```
+
 `PROJECT_MAP.md` may have newer documentation-only commits on top of this source checkpoint.
 
 Use the current GitHub `main` HEAD / `git log` when the exact latest branch commit matters.
@@ -348,10 +362,10 @@ export interface ActiveStrategy {
 }
 ```
 
-Default strategy created at game/benchmark initialization:
+Default strategy created at normal game / local benchmark initialization:
 
 ```text
-policy              SAFE_CHASE
+policy              EAT_SAFE_FOOD
 foodWeight          1.0
 openSpaceWeight     0.4
 wallPenalty         0.3
@@ -359,7 +373,9 @@ bodyPenalty         0.8
 recentVisitPenalty  0.0
 ```
 
-Default runtime policy has NOT been changed to EAT_SAFE_FOOD.
+`createDefaultStrategy()` is the shared default-strategy factory.
+
+SAFE_CHASE remains implemented and Qwen-selectable; only the default initialization policy changed.
 
 ---
 
@@ -716,9 +732,13 @@ Current active AgentPanel displays:
 Danger
 Mobility = legal / survivable
 Reachable
+Mobility Streak
+Max Mobility Streak
+Last Low Streak Before Dead End
+Dead End Events
 ```
 
-The four episode counters above are NOT currently rendered in `src/agent-panel.ts`.
+The four episode counters are rendered in `src/agent-panel.ts` and update through the existing AgentInfo telemetry path.
 
 Important:
 
@@ -903,9 +923,11 @@ For benchmark-console runs, use the debug benchmark entrypoint instead of pressi
 ### `runLocalBenchmark(seed, maxSteps)`
 
 - initializes a deterministic seeded run
-- uses the default SAFE_CHASE strategy
+- uses the shared default EAT_SAFE_FOOD strategy
 - calls `runStep(undefined, 'FIXED')`
 - reports explicit termination reason instead of treating all failures as engine game-over
+
+Historical benchmark results produced before this default-policy change used SAFE_CHASE and are not directly comparable to new default EAT_SAFE_FOOD benchmark results.
 
 ### `runSafeBfsBenchmark(seed, maxSteps)`
 
@@ -973,6 +995,10 @@ Unique Heads
 Danger
 Mobility
 Reachable
+Mobility Streak
+Max Mobility Streak
+Last Low Streak Before Dead End
+Dead End Events
 ```
 
 Trigger-time snapshot fields preserve evidence when LOOP/STAGNATION fires:
@@ -1010,7 +1036,6 @@ CREATE_SPACE policy
 Hamiltonian / safe-cycle endgame mode
 A* planner
 full fixed GameSnapshot planner fixture suite
-Danger episode counters rendered in AgentPanel
 ```
 
 Current important limitations:
@@ -1033,24 +1058,23 @@ Do not mix these into one OpenCode patch.
 Suggested order from the current source state:
 
 ```text
-1. Finish Danger episode observability
-   - optionally render current/max/pre-dead/dead-end counters
-
-2. Collect runtime death episodes
+1. Collect runtime death episodes under the EAT_SAFE_FOOD default
    - determine whether LOW_MOBILITY persists before DEAD_END
+   - full-reset episode counters between independent samples, or record each dead-end transition explicitly
 
-3. Decide Danger intervention from evidence
-   - persistence trigger if LOW streak is meaningful
+2. Decide Danger intervention from evidence
+   - persistence trigger if LOW streak is meaningfully persistent
    - otherwise consider 2–3 step local lookahead
 
-4. Add deterministic micro fixtures for planner failure states
+3. Add deterministic micro fixtures for planner failure states
 
-5. Add real survival / escape fallback only when failure evidence justifies it
+4. Add real survival / escape fallback only when failure evidence justifies it
 
-6. Re-evaluate default policy (SAFE_CHASE vs EAT_SAFE_FOOD) separately
-
-7. Only later consider additional policies / A* / Hamiltonian mode
+5. Only later consider additional policies / A* / Hamiltonian mode
 ```
+
+Danger episode observability is complete in the active AgentPanel.
+The current default-policy decision is EAT_SAFE_FOOD.
 
 Do not hardwire PRESSURED=40 into runtime merely because the pure budget module returns 40.
 
@@ -1211,7 +1235,7 @@ Entry:                    src/main.ts
 Framework:                Vanilla TypeScript + Vite + Canvas 2D
 Board:                    32×24 / 768 cells
 AgentController:          src/agent/agent-controller.ts
-Default policy:           SAFE_CHASE
+Default policy:           EAT_SAFE_FOOD
 Implemented policies:     SAFE_CHASE | EAT_SAFE_FOOD
 Greedy executor:          src/agent/strategy-executor.ts
 BFS planner:              src/agent/path-planner.ts
