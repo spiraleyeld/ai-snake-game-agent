@@ -9,6 +9,7 @@ import { evaluateFoodPath } from './safe-food-validator.js';
 import { stagnationBudget } from './stagnation-budget.js';
 import type { DangerLevel } from './danger-monitor.js';
 import { assessDanger } from './danger-monitor.js';
+import { DangerEpisodeTracker } from './danger-episode-tracker.js';
 
 export type StagnationMode = 'FIXED' | 'DYNAMIC';
 
@@ -77,6 +78,14 @@ export interface BenchmarkResult {
   recentUnique: number;
   gameOver: boolean;
   terminationReason: BenchmarkTerminationReason;
+}
+
+export interface LocalBenchmarkResult extends BenchmarkResult {
+  maxLowMobilityStreak: number;
+  lastLowStreakBeforeDeadEnd: number;
+  deadEndEventCount: number;
+  maxLowMobilityReachableDrop: number;
+  lastLowMobilityReachableDropBeforeDeadEnd: number;
 }
 
 export interface SafeBfsBenchmarkResult extends BenchmarkResult {
@@ -148,11 +157,7 @@ export class AgentController {
   private dangerTelemetry: { dl: DangerLevel | '-'; lmc: number; smc: number; rc: number } | null = null;
 
   // Danger episode tracking (telemetry only)
-  private currentLowMobilityStreak: number = 0;
-  private maxLowMobilityStreak: number = 0;
-  private lastLowStreakBeforeDeadEnd: number = 0;
-  private deadEndEventCount: number = 0;
-  private previousDangerLevel: DangerLevel | '-' = '-';
+  private dangerEpisode = new DangerEpisodeTracker();
 
   constructor(config?: Partial<AgentConfig>, callbacks?: AgentCallbacks) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -273,6 +278,9 @@ export class AgentController {
     this.currentInfo.snapshotFoodDistCurrent = null;
     this.currentInfo.snapshotFoodDistBest = null;
     this.currentInfo.snapshotRecentUnique = null;
+
+    // Danger episode telemetry (reset for benchmark isolation)
+    this.dangerEpisode.reset();
   }
 
   async startGame(): Promise<boolean> {
@@ -314,23 +322,7 @@ export class AgentController {
     this.dangerTelemetry = { dl: dangerTelemetry.dangerLevel, lmc: dangerTelemetry.legalMoveCount, smc: dangerTelemetry.survivableMoveCount, rc: dangerTelemetry.reachableCells };
 
     // Danger episode telemetry tracking (per NORMAL runtime tick)
-    const currentDanger = this.dangerTelemetry.dl;
-    if (currentDanger === 'LOW_MOBILITY') {
-      this.currentLowMobilityStreak += 1;
-      if (this.currentLowMobilityStreak > this.maxLowMobilityStreak) {
-        this.maxLowMobilityStreak = this.currentLowMobilityStreak;
-      }
-    } else if (currentDanger === 'SAFE') {
-      this.currentLowMobilityStreak = 0;
-    } else if (currentDanger === 'DEAD_END_IMMINENT' && this.previousDangerLevel !== 'DEAD_END_IMMINENT') {
-      this.lastLowStreakBeforeDeadEnd = this.currentLowMobilityStreak;
-      this.deadEndEventCount += 1;
-      this.currentLowMobilityStreak = 0;
-    } else if (currentDanger === 'DEAD_END_IMMINENT' && this.previousDangerLevel === 'DEAD_END_IMMINENT') {
-      // Repeated DEAD_END ticks: do NOT increment deadEndEventCount, keep streak at 0
-    }
-
-    this.previousDangerLevel = currentDanger;
+    this.dangerEpisode.processTick(this.dangerTelemetry.dl, this.dangerTelemetry.rc);
 
     if (legalMoves.length === 0) {
       this.running = false;
@@ -798,11 +790,7 @@ export class AgentController {
     this.failureReason = null;
     this._fixedPolicy = false;
     this.recentHeadPositions = [];
-    this.currentLowMobilityStreak = 0;
-    this.maxLowMobilityStreak = 0;
-    this.lastLowStreakBeforeDeadEnd = 0;
-    this.deadEndEventCount = 0;
-    this.previousDangerLevel = '-';
+    this.dangerEpisode.reset();
     this.currentInfo = this.getDefaultInfo();
     this.updateUI();
   }
@@ -1138,10 +1126,11 @@ export class AgentController {
       this.currentInfo.reachableCells = this.dangerTelemetry.rc;
     }
 
-    this.currentInfo.currentLowMobilityStreak = this.currentLowMobilityStreak;
-    this.currentInfo.maxLowMobilityStreak = this.maxLowMobilityStreak;
-    this.currentInfo.lastLowStreakBeforeDeadEnd = this.lastLowStreakBeforeDeadEnd;
-    this.currentInfo.deadEndEventCount = this.deadEndEventCount;
+    const episodeState = this.dangerEpisode.getState();
+    this.currentInfo.currentLowMobilityStreak = episodeState.currentLowMobilityStreak;
+    this.currentInfo.maxLowMobilityStreak = episodeState.maxLowMobilityStreak;
+    this.currentInfo.lastLowStreakBeforeDeadEnd = episodeState.lastLowStreakBeforeDeadEnd;
+    this.currentInfo.deadEndEventCount = episodeState.deadEndEventCount;
 
     this.callbacks.onUpdate?.({ ...this.currentInfo });
   }
@@ -1158,7 +1147,7 @@ export class AgentController {
     seed: number,
     maxSteps: number,
     policy?: 'EAT_SAFE_FOOD' | 'SAFE_CHASE' | 'CREATE_SPACE'
-  ): Promise<BenchmarkResult> {
+  ): Promise<LocalBenchmarkResult> {
     if (!this.engine) {
       throw new Error('runLocalBenchmark requires an attached GameEngine');
     }
@@ -1245,6 +1234,11 @@ export class AgentController {
       recentUnique,
       gameOver,
       terminationReason,
+      maxLowMobilityStreak: currentInfo.maxLowMobilityStreak,
+      lastLowStreakBeforeDeadEnd: currentInfo.lastLowStreakBeforeDeadEnd,
+      deadEndEventCount: currentInfo.deadEndEventCount,
+      maxLowMobilityReachableDrop: this.dangerEpisode.getState().maxLowMobilityReachableDrop,
+      lastLowMobilityReachableDropBeforeDeadEnd: this.dangerEpisode.getState().lastLowMobilityReachableDropBeforeDeadEnd,
     };
   }
 
@@ -1252,7 +1246,7 @@ export class AgentController {
     seed: number,
     maxSteps: number,
     recoverySteps: number = 40
-  ): Promise<BenchmarkResult & { recoveryTriggered: boolean; recoveryCompleted: boolean }> {
+  ): Promise<BenchmarkResult & { recoveryTriggered: boolean; recoveryCompleted: boolean; maxLowMobilityStreak: number; lastLowStreakBeforeDeadEnd: number; deadEndEventCount: number }> {
     if (!this.engine) {
       throw new Error('runRecoveryBenchmark requires an attached GameEngine');
     }
@@ -1368,6 +1362,9 @@ export class AgentController {
       terminationReason,
       recoveryTriggered,
       recoveryCompleted,
+      maxLowMobilityStreak: this.dangerEpisode.getState().maxLowMobilityStreak,
+      lastLowStreakBeforeDeadEnd: this.dangerEpisode.getState().lastLowStreakBeforeDeadEnd,
+      deadEndEventCount: this.dangerEpisode.getState().deadEndEventCount,
     };
   }
 
