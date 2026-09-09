@@ -2,9 +2,8 @@
 
 > Current architecture/state map for fast onboarding.
 > Reconciled through 2026-09-10 against latest pushed GitHub checkpoint plus current local build evidence.
-> Latest pushed architecture source checkpoint: `af1d924`.
+> Latest pushed architecture source checkpoint: `93da94a`.
 > Latest pushed documentation alignment checkpoint: `640ad2b`.
-> Current local source is newer and includes `DangerEpisodeTracker` plus reachable-space LOW_MOBILITY episode telemetry.
 > Detailed benchmark evidence lives in `BENCHMARK_NOTES.md`.
 > OpenCode workflow / Git / context rules live in `AGENTS.md`.
 
@@ -2000,13 +1999,10 @@ Local:
 D:\Projects\snake-game
 
 Latest pushed architecture source checkpoint:
-af1d924
+93da94a
 
 Latest pushed documentation checkpoint:
 640ad2b
-
-Current local source:
-newer than pushed source checkpoint
 
 Frontend:
 Vanilla TypeScript + Vite + Canvas 2D
