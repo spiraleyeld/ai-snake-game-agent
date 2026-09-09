@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "test:danger": "tsx src/agent/__tests__/danger-monitor-fixtures.ts",
-    "test:stagnation": "tsx src/agent/__tests__/stagnation-budget-fixtures.ts"
+    "test:stagnation": "tsx src/agent/__tests__/stagnation-budget-fixtures.ts",
+    "test:create-space": "tsx src/agent/__tests__/create-space-fixtures.ts"
   },
   "devDependencies": {
     "@types/node": "^26.5.0",

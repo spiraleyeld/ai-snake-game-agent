@@ -10,8 +10,9 @@ interface SnakeDebugAPI {
   getAgentInfo: () => AgentDebugInfo | null;
   setSeed: (seed: number | null) => void;
   restart: () => void;
-  runLocalBenchmark: (seed: number, maxSteps: number) => Promise<BenchmarkResult>;
+  runLocalBenchmark: (seed: number, maxSteps: number, policy?: 'EAT_SAFE_FOOD' | 'SAFE_CHASE' | 'CREATE_SPACE') => Promise<BenchmarkResult>;
   runSafeBfsBenchmark: (seed: number, maxSteps: number) => Promise<SafeBfsBenchmarkResult>;
+  runRecoveryBenchmark: (seed: number, maxSteps: number, recoverySteps?: number) => Promise<BenchmarkResult & { recoveryTriggered: boolean; recoveryCompleted: boolean }>;
 }
 
 interface AgentDebugInfo {

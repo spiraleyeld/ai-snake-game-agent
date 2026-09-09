@@ -319,7 +319,7 @@ export class LmStudioClient {
         cleaned = cleaned.replace(/```[\s\S]*?```/g, '').trim();
         const parsed = JSON.parse(cleaned);
 
-        const validPolicies = ['SAFE_CHASE', 'EAT_SAFE_FOOD'];
+        const validPolicies = ['SAFE_CHASE', 'EAT_SAFE_FOOD', 'CREATE_SPACE'];
         if (!validPolicies.includes(parsed.policy)) return null;
 
         const params = parsed.params;

@@ -1,6 +1,9 @@
 # PROJECT_MAP — Snake Game + Local Qwen Agent
 
-> Reconciled against local source checkpoint `fec2ee4`, current runtime evidence, and the latest GitHub `main` available before this local checkpoint on 2026-09-09.
+> Reconciled against current local working-tree / runtime evidence through 2026-09-09.
+> Latest pushed documentation checkpoint: `407b19c`.
+> Latest pushed source checkpoint: `fec2ee4`.
+> Current local working tree is newer and contains uncheckpointed CREATE_SPACE, fixed-policy benchmark, recovery-benchmark, and Qwen strategy-integration changes.
 > Purpose: fast onboarding for fresh OpenCode / ChatGPT sessions without broad repository rediscovery.
 
 ## 0. Authority
@@ -16,11 +19,13 @@ CURRENT LOCAL RUNTIME EVIDENCE
 > handoff / current conversation evidence
 > old assumptions
 ```
+
 - If this file conflicts with source, source wins and this file should be updated.
 - `AGENTS.md` governs OpenCode workflow, Git safety, testing, permissions, and security.
 - Do not infer runtime behavior from legacy duplicate files.
 - Cosmetic CSS-only work usually does not require an architecture-map update.
 - Absence from GitHub does not prove absence from the local working tree.
+- Current local source is newer than the latest pushed GitHub source checkpoint.
 
 ---
 
@@ -113,33 +118,56 @@ Do not edit, delete, stage, or adopt them into the formal architecture as a side
 
 ## 2. Git Snapshot / Safety
 
-Current local source checkpoint:
+Latest pushed documentation checkpoint:
+
+```text
+407b19c docs: renew project map for 32x12 runtime
+```
+
+Latest pushed source checkpoint:
 
 ```text
 fec2ee4 feat: use half-height board and align runtime UI
 ```
 
-Major source-state changes represented by this checkpoint include:
+Current local working tree is newer than that pushed source checkpoint.
+
+Meaningful local architecture changes accumulated after `fec2ee4` include:
+
+```text
+CREATE_SPACE deterministic local policy
+CREATE_SPACE focused fixtures
+fixed-policy runLocalBenchmark(policy?)
+runRecoveryBenchmark()
+debug API / global type updates
+Qwen CREATE_SPACE prompt / validation / controller assignment
+```
+
+Therefore:
+
+> `fec2ee4` remains the latest pushed source checkpoint, but it is no longer a complete description of current local runtime behavior.
+
+Major source-state changes represented by `fec2ee4` include:
 
 ```text
 src/main.ts
 → canvas height 480 → 240
-→ current logical game geometry becomes 640×240 / 32×12
+→ logical geometry 640×240 / 32×12
 
 src/agent/agent-controller.ts
 → Agent COLS = 32
 → Agent ROWS = 12
-→ fixes confirmed stale 24-row Agent-world mismatch
+→ fixed stale 24-row Agent-world mismatch
 
 src/style.css
 → shorter 8:3 game frame
-→ frame aligned vertically in the middle column
+→ frame aligned vertically in middle column
 
 src/game/renderer.ts
-→ start-screen vertical text placement adjusted for shorter canvas
+→ start-screen vertical text placement adjusted
 ```
 
-The previous important source checkpoint:
+The previous important checkpoint:
 
 ```text
 5c52212 feat: default to safe food and expose danger telemetry
@@ -153,8 +181,6 @@ Danger episode telemetry
 Danger episode UI rendering
 ```
 
-but it is no longer the current local source checkpoint.
-
 Repository:
 
 ```text
@@ -163,7 +189,7 @@ origin/main → https://github.com/spiraleyeld/ai-snake-game-agent
 
 Important:
 
-> GitHub `main` is only the latest pushed checkpoint. Current local source may be newer.
+> GitHub `main` is only the latest pushed checkpoint. Current local source is newer.
 
 Before relying on GitHub-only absence/presence for local-file decisions, obtain:
 
@@ -339,10 +365,10 @@ controller.runStep()
 
 Pause safety:
 
-* AgentPanel stops scheduling the local loop while paused.
-* AgentController rejects `runStep()` while paused.
-* Movement helpers guard against physical stepping while paused.
-* An async Qwen response may finish while paused, but completion must not itself move the snake.
+- AgentPanel stops scheduling the local loop while paused.
+- AgentController rejects `runStep()` while paused.
+- Movement helpers guard against physical stepping while paused.
+- An async Qwen response may finish while paused, but completion must not itself move the snake.
 
 Current desktop layout:
 
@@ -360,13 +386,13 @@ game frame: vertically centered
 left/right panels: full-height
 ```
 
-The visual frame now corresponds to the current 640×240 playable board.
+The visual frame corresponds to the current 640×240 playable board.
 
 Control values are intentionally compact; ordinary stat/diagnostic values use smaller tabular numeric text.
 
 Thinking text uses wrapping rules so long JSON / identifiers do not expand the left grid track.
 
-Start-screen blue/gray instructional text is positioned for the shorter 240 px canvas rather than the historical 480 px canvas.
+Start-screen instructional text is positioned for the shorter 240 px canvas rather than the historical 480 px canvas.
 
 ---
 
@@ -410,24 +436,34 @@ Current normal policy path:
 
 ```text
 ActiveStrategy
-├─ SAFE_CHASE
-│  └─ StrategyExecutor weighted local Greedy
+├─ EAT_SAFE_FOOD
+│  └─ evaluateFoodPath()
+│     ├─ BFS to food
+│     ├─ full path simulation
+│     └─ post-food tail-reachability heuristic
+│     → safe path[0]
 │
-└─ EAT_SAFE_FOOD
-   └─ evaluateFoodPath()
-      ├─ BFS to food
-      ├─ full path simulation
-      └─ post-food tail-reachability heuristic
-      → safe path[0]
+├─ SAFE_CHASE
+│  └─ StrategyExecutor weighted one-step Greedy
+│
+└─ CREATE_SPACE
+   └─ StrategyExecutor deterministic space-first branch
+      ├─ primary: maximize exact uncapped body-aware reachable space
+      ├─ secondary: better food progress on equal space
+      └─ deterministic tie behavior
 
 candidate
 → validateDirection()
+→ SafetyLayer may override immediate direction
 → executeStrategyMove()
-→ engine.setDirection()
-→ engine.step()
+→ GameEngine
 ```
 
-If EAT_SAFE_FOOD cannot produce a confirmed safe non-empty path, normal runtime falls back to the current weighted Greedy `StrategyExecutor` for that tick.
+If EAT_SAFE_FOOD cannot produce a confirmed safe non-empty path, normal runtime falls back to the weighted Greedy `StrategyExecutor` for that tick.
+
+CREATE_SPACE is semantically distinct from SAFE_CHASE.
+
+It is not merely SAFE_CHASE with larger `openSpaceWeight`.
 
 ### Board-dimension synchronization
 
@@ -457,9 +493,7 @@ Agent Safety/planner world: y = 0..23
 GameEngine physical world:  y = 0..11
 ```
 
-The Agent could therefore treat `y >= 12` as legal while GameEngine treated the same move as a wall collision.
-
-Current source checkpoint `fec2ee4` fixes this mismatch:
+Current source fixes this mismatch:
 
 ```text
 Agent COLS = 32
@@ -479,26 +513,44 @@ src/agent/types.ts
 src/agent/agent-controller.ts
 ```
 
-```ts
-export type StrategyPolicy = 'SAFE_CHASE' | 'EAT_SAFE_FOOD';
+Current strategy policy type:
 
-export interface ActiveStrategy {
-  policy: StrategyPolicy;
-  params: {
-    foodWeight: number;
-    openSpaceWeight: number;
-    wallPenalty: number;
-    bodyPenalty: number;
-    recentVisitPenalty: number;
-  };
-  startedAtStep: number;
-}
+```ts
+export type StrategyPolicy =
+  | 'SAFE_CHASE'
+  | 'EAT_SAFE_FOOD'
+  | 'CREATE_SPACE';
 ```
 
-Default strategy created at normal game / local benchmark initialization:
+`ActiveStrategy` contains:
 
 ```text
-policy              EAT_SAFE_FOOD
+policy
+params
+startedAtStep
+```
+
+Strategy params remain:
+
+```text
+foodWeight
+openSpaceWeight
+wallPenalty
+bodyPenalty
+recentVisitPenalty
+```
+
+`createDefaultStrategy(policy?)` can construct a fresh `ActiveStrategy` for a currently implemented policy.
+
+When the policy argument is omitted:
+
+```text
+default = EAT_SAFE_FOOD
+```
+
+Current default params:
+
+```text
 foodWeight          1.0
 openSpaceWeight     0.4
 wallPenalty         0.3
@@ -506,31 +558,54 @@ bodyPenalty         0.8
 recentVisitPenalty  0.0
 ```
 
-`createDefaultStrategy()` is the shared default-strategy factory.
-
-SAFE_CHASE remains implemented and Qwen-selectable; only the default initialization policy changed.
-
-Current implemented strategic tools remain:
+Current implemented strategic tools:
 
 ```text
+EAT_SAFE_FOOD
 SAFE_CHASE
+CREATE_SPACE
+```
+
+### CREATE_SPACE semantics
+
+Primary objective:
+
+```text
+maximize exact uncapped body-aware reachable space
+```
+
+Secondary tie-break:
+
+```text
+if reachable-space counts tie
+→ prefer better food progress
+```
+
+Final tie:
+
+```text
+preserve deterministic existing tie behavior
+```
+
+CREATE_SPACE does not replace the normal default.
+
+Normal game initialization still begins with:
+
+```text
 EAT_SAFE_FOOD
 ```
 
-Future names such as:
+Future policy names still not implemented:
 
 ```text
-CREATE_SPACE
 FOLLOW_TAIL
 ESCAPE
-SAFE_CYCLE
+SAFE_CYCLE / HAMILTONIAN
 ```
-
-are NOT implemented yet.
 
 ---
 
-## 9. SAFE_CHASE / StrategyExecutor
+## 9. SAFE_CHASE / CREATE_SPACE / StrategyExecutor
 
 Source:
 
@@ -538,7 +613,9 @@ Source:
 src/agent/strategy-executor.ts
 ```
 
-For each legal immediate direction, the executor scores:
+### SAFE_CHASE
+
+For each legal immediate direction, SAFE_CHASE scores:
 
 ```text
 food progress
@@ -550,21 +627,52 @@ food progress
 
 Then it chooses the highest-scoring immediate direction.
 
-### Body-aware open space is implemented
-
-`countOpenSpace()` receives `snakeBody`, builds a `bodySet`, and blocks body cells during flood fill.
+Existing `countOpenSpace()`:
 
 ```text
-countOpenSpace(nx, ny, snakeBody, cols, rows)
+body-aware flood fill
+cap = 200 cells
 ```
 
-The flood fill is capped at 200 cells for performance.
-
-On the current 384-cell board, that cap still means the metric is not a complete full-board reachable-area measurement in all large-open-space states.
+On the current 384-cell board, that cap means SAFE_CHASE open-space scoring is not a complete full-board reachable-area measurement in large-open-space states.
 
 SAFE_CHASE remains a one-step Greedy policy.
 
 It does not itself represent a committed multi-step detour or dedicated survival planner.
+
+### CREATE_SPACE
+
+CREATE_SPACE has a dedicated deterministic branch.
+
+It does not use a weighted sum as its primary decision.
+
+Flow:
+
+```text
+1. enumerate legal candidate moves
+2. compute exact uncapped body-aware reachable space for each candidate
+3. select the candidate with the largest reachable region
+4. if equal, prefer better food progress
+5. preserve deterministic tie behavior afterward
+```
+
+CREATE_SPACE uses an uncapped reachable-space helper.
+
+This avoids the SAFE_CHASE plateau where regions such as:
+
+```text
+210 cells
+vs
+350 cells
+```
+
+would both appear as:
+
+```text
+200
+```
+
+The existing capped SAFE_CHASE helper was intentionally left unchanged.
 
 ---
 
@@ -581,21 +689,21 @@ findPath(start, target, blocked, cols, rows, currentDirection?)
 
 Characteristics:
 
-* deterministic direction order: Up, Down, Left, Right
-* prevents immediate 180° reversal at the start node when current direction is supplied
-* respects board bounds and blocked cells
-* does not mutate GameEngine
+- deterministic direction order: Up, Down, Left, Right
+- prevents immediate 180° reversal at the start node when current direction is supplied
+- respects board bounds and blocked cells
+- does not mutate GameEngine
 
 ### `snake-simulator.ts`
 
 `simulatePath()` virtually executes a full Direction path using engine-like semantics:
 
-* opposite requested direction is ignored and current direction executes
-* wall collision invalidates simulation
-* current full body is checked before tail removal
-* food consumption causes growth / no tail pop
-* no RNG
-* no GameEngine mutation
+- opposite requested direction is ignored and current direction executes
+- wall collision invalidates simulation
+- current full body is checked before tail removal
+- food consumption causes growth / no tail pop
+- no RNG
+- no GameEngine mutation
 
 ### `safe-food-validator.ts`
 
@@ -658,17 +766,29 @@ candidate
 → if rejected: SafetyLayer may return fallback direction
 ```
 
-Current controller behavior is stricter than merely executing the fallback:
+Normal runtime behavior:
 
-> If SafetyLayer overrides an ActiveStrategy candidate, the controller can invalidate the active strategy and fall back toward the higher-level Qwen path on a later tick.
+> If SafetyLayer overrides an ActiveStrategy candidate, the controller may invalidate the active strategy and later return toward the higher-level Qwen path.
 
-`pickSafeDirection()` also exists for the legacy/Qwen-plan failure path.
+Fixed-policy benchmark exception:
 
-Its internal open-space fallback is a separate heuristic and should not be confused with:
+> During an explicit fixed-policy benchmark, SafetyLayer may still override the actual immediate direction, but the policy identity is preserved for the next tick.
+
+Therefore:
+
+```text
+fixed policy ≠ fixed direction
+```
+
+`pickSafeDirection()` also exists for local fallback / legacy-Qwen-plan failure paths.
+
+Its internal open-space heuristic is separate from:
 
 ```text
 StrategyExecutor.countOpenSpace()
 ```
+
+and separate from CREATE_SPACE's exact uncapped reachable-space ordering.
 
 Current SafetyLayer dimensions must remain consistent with:
 
@@ -732,9 +852,9 @@ recent head positions
 all five strategy params
 ```
 
-LOOP detection uses its own fixed `STAGNATION_THRESHOLD` gate and is independent of dynamic stagnation-budget categories.
+LOOP detection uses its own fixed threshold gate and is independent of dynamic stagnation-budget categories.
 
-On LOOP:
+Normal runtime on LOOP:
 
 ```text
 _lastTrigger = LOOP_DETECTED
@@ -743,6 +863,20 @@ capture trigger snapshot
 activeStrategy = null
 → optimizeStrategy() on following flow
 ```
+
+Fixed-policy benchmark exception:
+
+```text
+_lastTrigger = LOOP_DETECTED
+activeStrategy remains unchanged
+Qwen path remains disabled
+```
+
+However:
+
+> The outer benchmark loop may still terminate on `LOOP_DETECTED`.
+
+Therefore fixed-policy means policy identity is preserved, not that benchmark termination rules are disabled.
 
 ---
 
@@ -762,9 +896,9 @@ Progress is currently based on Manhattan distance to the current food.
 
 Progress reset conditions:
 
-* food eaten / score increases
-* new food target appears
-* current food distance improves below previous best
+- food eaten / score increases
+- new food target appears
+- current food distance improves below previous best
 
 Those resets restore:
 
@@ -795,14 +929,14 @@ FIXED
 
 ### FIXED
 
-Preserves old behavior:
+Preserves fixed-threshold behavior:
 
 ```text
 stepsSinceProgress >= 80
 → STAGNATION_DETECTED
 ```
 
-### DYNAMIC — current runtime behavior
+### DYNAMIC — current normal runtime behavior
 
 DYNAMIC starts with effective threshold 80.
 
@@ -852,11 +986,11 @@ else:
 
 Therefore:
 
-* `PRESSURED = 40` does NOT create an early 40-step runtime trigger.
-* `EMERGENCY = 0` does NOT make Danger directly trigger Qwen.
-* Danger/DEAD_END does not currently bypass the 80-step boundary.
+- `PRESSURED = 40` does NOT create an early 40-step runtime trigger.
+- `EMERGENCY = 0` does NOT make Danger directly trigger Qwen.
+- Danger / DEAD_END does not currently bypass the 80-step boundary.
 
-On STAGNATION:
+Normal runtime on STAGNATION:
 
 ```text
 _lastTrigger = STAGNATION_DETECTED
@@ -864,8 +998,20 @@ preserve failedStrategy
 capture trigger snapshot
 activeStrategy = null
 reset progress / loop tracking
-→ optimizeStrategy() in following flow
+→ optimizeStrategy()
 ```
+
+Fixed-policy benchmark exception:
+
+```text
+_lastTrigger = STAGNATION_DETECTED
+activeStrategy remains unchanged
+Qwen remains disabled
+```
+
+The outer benchmark may still terminate on STAGNATION.
+
+`runRecoveryBenchmark()` deliberately intercepts the first STAGNATION and converts it into a controlled CREATE_SPACE recovery episode.
 
 ---
 
@@ -929,7 +1075,7 @@ repeated DEAD_END ticks
 → do not increment event count again
 ```
 
-These four values are exposed through:
+These values are exposed through:
 
 ```text
 AgentInfo
@@ -939,9 +1085,9 @@ AgentPanel
 
 Lifecycle note:
 
-* `initializeLocalRun()` resets strategy/progress/loop state but does not clear all four episode counters.
-* Full controller `reset()` clears them.
-* Therefore they are controller-session telemetry unless a full reset occurs.
+- `initializeLocalRun()` resets strategy/progress/loop state but does not clear all four episode counters.
+- Full controller `reset()` clears them.
+- Therefore they are controller-session telemetry unless a full reset occurs.
 
 Current active AgentPanel displays:
 
@@ -961,7 +1107,7 @@ Important:
 
 ### Historical Danger evidence warning
 
-The board has changed from:
+The board changed from:
 
 ```text
 32×24 / 768 cells
@@ -983,9 +1129,7 @@ Max Mobility Streak = 33
 
 must not be turned directly into new 32×12 trigger thresholds.
 
-Absolute reachable-cell thresholds are especially sensitive to board geometry.
-
-Future Danger research should prefer normalized or trend-based evidence where appropriate, for example:
+Future Danger research should prefer normalized or trend-based evidence where appropriate:
 
 ```text
 reachable ratio
@@ -995,11 +1139,31 @@ distance-to-death
 safe-food failure reason
 ```
 
+### Current real-runtime trigger-timing evidence
+
+A normal runtime death has now been observed with:
+
+```text
+Strategy = EAT_SAFE_FOOD
+Last Trigger = -
+Live Stag = 18 / 80
+LLM Calls = 0
+Danger = DEAD_END_IMMINENT
+Reachable = 1
+Status = GAME-OVER
+```
+
+This proves:
+
+> Some deaths occur before the current LOOP / STAGNATION Qwen trigger path has time to activate.
+
+It does NOT yet prove which earlier Danger-related signal should become a trigger.
+
 ---
 
 ## 16. Qwen Strategy Optimization Flow
 
-Qwen high-level strategy optimization is event-driven, not called every tick.
+Qwen high-level strategy optimization remains event-driven.
 
 Current high-level failure triggers:
 
@@ -1008,7 +1172,7 @@ LOOP_DETECTED
 STAGNATION_DETECTED
 ```
 
-Both preserve `failedStrategy`, then `optimizeStrategy()` builds a strategy update prompt.
+Both preserve `failedStrategy`, then normal runtime may enter `optimizeStrategy()`.
 
 Local Planner Evidence included in strategy planning:
 
@@ -1019,14 +1183,25 @@ Food Path Safe
 Food Path Reason
 ```
 
-Qwen may return exactly one implemented policy:
+Qwen may now return exactly one implemented high-level policy:
 
 ```text
-SAFE_CHASE
 EAT_SAFE_FOOD
+SAFE_CHASE
+CREATE_SPACE
 ```
 
-Returned policy + params become the next `activeStrategy`.
+Integration path:
+
+```text
+AgentController optimization prompt
+→ CREATE_SPACE listed as an available policy
+→ LmStudioClient strategy response
+→ validPolicies accepts CREATE_SPACE
+→ optimizeStrategy() accepts CREATE_SPACE
+→ activeStrategy.policy = CREATE_SPACE
+→ subsequent ticks execute local CREATE_SPACE logic
+```
 
 All five numeric params remain required:
 
@@ -1038,14 +1213,16 @@ bodyPenalty
 recentVisitPenalty
 ```
 
-They remain useful for SAFE_CHASE and Greedy fallback behavior.
+They remain useful for SAFE_CHASE / Greedy fallback behavior.
+
+CREATE_SPACE uses its own space-first primary ordering even though an `ActiveStrategy` still contains the param object.
 
 `LmStudioClient.getStrategyUpdate()` validates:
 
-* policy is one of the implemented policies
-* all five params are finite numbers
-* numeric params are clamped to `0.0..2.0`
-* reason is text and rejected if too long
+- policy is one of the implemented policies
+- all five params are finite numbers
+- numeric params are clamped to the existing accepted range
+- reason is text and rejected if too long
 
 Thinking streams through:
 
@@ -1053,7 +1230,7 @@ Thinking streams through:
 reasoning_content
 ```
 
-while final JSON is parsed from normal:
+while final JSON is parsed from:
 
 ```text
 content
@@ -1069,21 +1246,51 @@ PRESSURED=40        → does NOT create a Qwen trigger
 EMERGENCY=0         → does NOT create a Qwen trigger
 ```
 
-### Intended strategic direction
+### Qwen architectural constraint
 
-Qwen should remain a high-level strategist.
+Qwen remains a high-level strategist.
 
-Current implemented strategic toolbox:
+Current high-level toolbox:
 
 ```text
 EAT_SAFE_FOOD
 SAFE_CHASE
+CREATE_SPACE
+```
+
+CREATE_SPACE execution is local deterministic TypeScript.
+
+Qwen does NOT become the normal per-tick direction generator.
+
+### Evidence status
+
+CREATE_SPACE Qwen code-path integration:
+
+```text
+PASS
+```
+
+Focused CREATE_SPACE fixtures:
+
+```text
+PASS
+```
+
+Build:
+
+```text
+PASS
+```
+
+Natural normal-runtime episode where Qwen independently selected CREATE_SPACE:
+
+```text
+NOT YET CAPTURED
 ```
 
 Potential future high-level modes:
 
 ```text
-CREATE_SPACE
 FOLLOW_TAIL
 ESCAPE
 ```
@@ -1093,8 +1300,6 @@ Potential future completion/endgame mode:
 ```text
 SAFE_CYCLE / HAMILTONIAN
 ```
-
-These future modes must not be described as implemented until real controller behavior exists.
 
 ---
 
@@ -1111,11 +1316,12 @@ executePlannedMove()
 
 It is not the healthy primary local-policy path.
 
-It can still be reached when:
+It can still be reached in normal non-fixed runtime when:
 
-* there is no active strategy / recovery strategy
-* the primitive plan is empty
-* food-change logic requests replanning
+- there is no active strategy / recovery strategy
+- the primitive plan is empty
+- food-change logic requests replanning
+- normal fallback flow reaches the legacy path
 
 Primitive Qwen moves still pass through:
 
@@ -1125,7 +1331,7 @@ validateDirection()
 
 before physical execution.
 
-If SafetyLayer overrides a planned move, the remaining plan is discarded and a later tick replans.
+If SafetyLayer overrides a planned move, the remaining plan is discarded and a later tick may replan.
 
 If Qwen fails to produce a primitive plan, controller uses:
 
@@ -1147,6 +1353,8 @@ refer to this primitive plan path.
 
 Do not reuse `plannedMoves` for normal local BFS routes unless telemetry semantics are intentionally redesigned.
 
+Fixed-policy benchmark modes explicitly gate Qwen optimization / replanning out.
+
 ---
 
 ## 18. `runStep()` Current High-Level Flow
@@ -1164,17 +1372,84 @@ High-level flow:
 2. compute legal moves
 3. assessDanger() once for current pre-move state
 4. update Danger episode telemetry
-5. if no legal moves → game over
+5. if no legal moves → game over / NO_MOVE path
 6. if directionSource exists → benchmark injection path
 7. else if activeStrategy exists:
-     EAT_SAFE_FOOD → safe path[0] when available
-     otherwise / fallback → weighted Greedy
+     EAT_SAFE_FOOD
+       → safe path[0] when available
+       → otherwise StrategyExecutor fallback
+
+     SAFE_CHASE
+       → weighted StrategyExecutor
+
+     CREATE_SPACE
+       → exact uncapped space-first StrategyExecutor branch
+
      → validateDirection()
      → executeStrategyMove()
      → LOOP + progress/stagnation tracking
-8. if failedStrategy exists → optimizeStrategy()
-9. otherwise primitive Qwen plannedMoves path / safe fallback
+
+8. if failedStrategy exists and not fixed-policy mode:
+     → optimizeStrategy()
+
+9. otherwise, when allowed:
+     → primitive Qwen plannedMoves / replan / safe fallback
 ```
+
+### Fixed-policy benchmark mode
+
+AgentController contains benchmark-only state:
+
+```text
+_fixedPolicy
+```
+
+When `runLocalBenchmark()` is called with an explicit policy:
+
+```text
+policy identity = fixed
+direction = not fixed
+```
+
+During that fixed-policy run:
+
+```text
+LOOP/STAGNATION
+→ may still be detected
+→ activeStrategy is NOT cleared
+
+SafetyLayer override
+→ actual immediate direction may change
+→ activeStrategy is preserved
+
+strategy candidate === null
+→ local pickSafeDirection()
+→ activeStrategy preserved
+
+optimizeStrategy()
+→ gated out
+
+replan()
+→ gated out
+```
+
+Therefore:
+
+> Fixed policy does not bypass SafetyLayer and does not mean fixed direction.
+
+The outer benchmark loop may still terminate on:
+
+```text
+LOOP_DETECTED
+STAGNATION_DETECTED
+NO_MOVE
+ENGINE_GAME_OVER
+MAX_STEPS
+```
+
+`_fixedPolicy` is reset when initialization occurs without an explicit policy and during controller reset.
+
+Normal runtime remains unchanged.
 
 ### Benchmark injection exception
 
@@ -1191,7 +1466,7 @@ That injected benchmark path does not pass through:
 validateDirection()
 ```
 
-and does not run the normal ActiveStrategy loop/progress lifecycle for that step.
+and does not run the normal ActiveStrategy loop/progress/stagnation lifecycle for that step.
 
 Do not generalize:
 
@@ -1218,7 +1493,7 @@ Exposes:
 window.__snakeDebug
 ```
 
-with:
+with runtime/debug methods including:
 
 ```text
 getState()
@@ -1229,38 +1504,57 @@ reset()
 getAgentInfo()
 setSeed(seed | null)
 restart()
-runLocalBenchmark(seed, maxSteps)
-runSafeBfsBenchmark(seed, maxSteps)
+
+runLocalBenchmark(
+  seed,
+  maxSteps,
+  policy?
+)
+
+runRecoveryBenchmark(
+  seed,
+  maxSteps,
+  recoverySteps?
+)
+
+runSafeBfsBenchmark(
+  seed,
+  maxSteps
+)
 ```
 
-Runtime note:
-
-> `window.__snakeDebug.getAgentInfo()` returns the controller's richer runtime `AgentInfo`, but `src/global.d.ts` currently declares an older/narrower `AgentDebugInfo` shape.
-
-The declaration may omit newer:
+`runLocalBenchmark()` optional policy:
 
 ```text
-Thinking
-stagnation
-Danger
-Danger episode fields
+EAT_SAFE_FOOD
+SAFE_CHASE
+CREATE_SPACE
 ```
 
-`getState()` includes:
+If policy is omitted:
 
 ```text
-snake
-food
-direction
-score
-highScore
-paused
-gameOver
-gameStarted
-speed
-manualMode
-seed
+existing non-fixed-policy EAT_SAFE_FOOD benchmark behavior is preserved
 ```
+
+If an explicit policy is provided:
+
+```text
+fixed-policy mode is enabled
+```
+
+`runRecoveryBenchmark()` is a controlled research entrypoint.
+
+`src/global.d.ts` has been updated so the benchmark/debug declarations match the current:
+
+```text
+runLocalBenchmark(policy?)
+runRecoveryBenchmark(...)
+```
+
+API shapes.
+
+The broader runtime `AgentInfo` object may still contain richer telemetry than the declared debug-info type.
 
 For normal runtime manual testing:
 
@@ -1270,7 +1564,7 @@ START AGENT
 
 must be pressed.
 
-For benchmark-console runs, use the debug benchmark entrypoint instead of pressing START AGENT.
+For benchmark-console runs, use the debug benchmark entrypoints instead of pressing START AGENT.
 
 Important reset distinction:
 
@@ -1288,38 +1582,109 @@ A fresh page/controller is the reliable clean boundary when controller-level sta
 
 ## 20. Benchmarks
 
-### `runLocalBenchmark(seed, maxSteps)`
+### `runLocalBenchmark(seed, maxSteps, policy?)`
 
-* initializes a deterministic seeded run
-* uses shared default EAT_SAFE_FOOD strategy
-* calls `runStep(undefined, 'FIXED')`
-* reports explicit termination reason instead of treating all failures as engine game-over
+Without explicit policy:
+
+```text
+initial strategy = EAT_SAFE_FOOD
+_fixedPolicy = false
+existing non-fixed-policy EAT_SAFE_FOOD benchmark behavior is preserved
+Qwen may still be reachable through normal failure flow
+```
+
+With explicit policy:
+
+```text
+fresh ActiveStrategy
+_fixedPolicy = true
+same GameEngine lifecycle
+same SafetyLayer path
+Qwen disabled for entire fixed-policy run
+```
+
+Supported explicit fixed policies:
+
+```text
+EAT_SAFE_FOOD
+SAFE_CHASE
+CREATE_SPACE
+```
+
+SafetyLayer may still override actual direction.
+
+LOOP/STAGNATION may still terminate the benchmark even though policy identity is preserved.
+
+### `runRecoveryBenchmark(seed, maxSteps, recoverySteps = 40)`
+
+Controlled deterministic recovery harness:
+
+```text
+start fixed EAT_SAFE_FOOD
+
+→ first STAGNATION_DETECTED
+→ fresh CREATE_SPACE
+→ resetProgressTracking()
+→ _lastTrigger = '-'
+
+→ run CREATE_SPACE for recoverySteps
+
+→ fresh EAT_SAFE_FOOD
+→ resetProgressTracking()
+→ _lastTrigger = '-'
+
+→ continue benchmark
+```
+
+Only one CREATE_SPACE recovery episode is allowed per run.
+
+Later STAGNATION terminates normally.
+
+LOOP / NO_MOVE / GameEngine termination semantics remain unchanged.
+
+Qwen is disabled for the entire recovery benchmark.
+
+Return value extends `BenchmarkResult` with:
+
+```text
+recoveryTriggered
+recoveryCompleted
+```
+
+Important:
+
+> The automatic 40-step CREATE_SPACE recovery lifecycle is a benchmark experiment only.
+
+Normal runtime does NOT automatically run CREATE_SPACE for exactly 40 steps after STAGNATION.
+
+Normal runtime instead uses:
+
+```text
+LOOP / STAGNATION
+→ Qwen high-level optimization
+→ Qwen may choose CREATE_SPACE
+```
 
 ### `runSafeBfsBenchmark(seed, maxSteps)`
 
-* initializes deterministic seeded run
-* injects a local `directionSource`
-* evaluates Safe-BFS every step
-* uses safe food path when available
-* otherwise uses StrategyExecutor Greedy fallback
-* calls `runStep(directionSource, 'FIXED')`
-* tracks safe-BFS usage and fallback reasons
+Behavior remains unchanged.
 
-Benchmark stagnation semantics are not identical:
+It:
 
-* `runLocalBenchmark()` uses normal ActiveStrategy lifecycle with `runStep(undefined, 'FIXED')`, preserving the fixed 80-step stagnation watchdog.
-* `runSafeBfsBenchmark()` supplies `directionSource`; `runStep()` therefore takes the benchmark-injection branch and returns before normal LOOP/progress/stagnation tracking.
+- initializes deterministic seeded run
+- injects a local `directionSource`
+- evaluates Safe-BFS each step
+- uses safe food path when available
+- otherwise uses StrategyExecutor Greedy fallback
+- tracks Safe-BFS usage / fallback reasons
 
-Therefore SafeBFS does not generate new:
+Because it uses the `directionSource` injection path, it does not follow the same normal ActiveStrategy lifecycle.
 
-```text
-STAGNATION_DETECTED
-LOOP_DETECTED
-```
+Therefore it is not apples-to-apples with fixed-policy `runLocalBenchmark()`.
 
-through the normal lifecycle.
+### Benchmark termination reasons
 
-Benchmark termination reasons include:
+Include:
 
 ```text
 ENGINE_GAME_OVER
@@ -1339,9 +1704,200 @@ STAGNATION
 
 as equivalent to engine GameOver.
 
+### Fixed-policy evidence — 500-step comparison
+
+Seeds:
+
+```text
+1001–1005
+```
+
+maxSteps:
+
+```text
+500
+```
+
+Results:
+
+```text
+EAT_SAFE_FOOD
+average score: 33.4
+average steps: 500
+MAX_STEPS: 5/5
+
+CREATE_SPACE
+average score: 32.2
+average steps: 500
+MAX_STEPS: 5/5
+
+SAFE_CHASE
+average score: 4.0
+average steps: 129
+LOOP_DETECTED: 5/5
+```
+
+Interpretation:
+
+> At a 500-step horizon, EAT_SAFE_FOOD and CREATE_SPACE were not meaningfully separated by survival.
+
+SAFE_CHASE performed substantially worse in this controlled batch.
+
+### Fixed-policy evidence — 2000-step comparison
+
+Same seeds:
+
+```text
+1001–1005
+```
+
+maxSteps:
+
+```text
+2000
+```
+
+Results:
+
+```text
+EAT_SAFE_FOOD
+average score: 93.8
+average steps: 1841.4
+
+CREATE_SPACE
+average score: 56.8
+average steps: 1170.6
+STAGNATION_DETECTED: 5/5
+```
+
+Interpretation:
+
+> CREATE_SPACE is not supported by current evidence as a whole-run primary policy.
+
+It is better positioned as a temporary recovery / reorganization capability.
+
+### CREATE_SPACE recovery evidence
+
+Controlled recovery evidence currently covers:
+
+```text
+seeds 1001–1005
++
+seeds 2001–2020
+=
+25 controlled seeds
+```
+
+Baseline termination counts across those 25 seeds:
+
+```text
+MAX_STEPS:            16
+NO_MOVE:               6
+STAGNATION_DETECTED:   3
+```
+
+Recovery termination counts:
+
+```text
+MAX_STEPS:            19
+NO_MOVE:               6
+STAGNATION_DETECTED:   0
+```
+
+Only three baseline runs actually reached STAGNATION:
+
+```text
+1001
+1002
+2009
+```
+
+All three:
+
+```text
+triggered CREATE_SPACE recovery
+completed the 40-step recovery window
+improved score
+improved survival steps
+converted STAGNATION termination → MAX_STEPS
+```
+
+Triggered-case improvements:
+
+```text
+1001
+Baseline:  96 / 1736 / STAGNATION_DETECTED
+Recovery: 104 / 2000 / MAX_STEPS
+Δ score: +8
+Δ steps: +264
+
+1002
+Baseline:  88 / 1875 / STAGNATION_DETECTED
+Recovery:  93 / 2000 / MAX_STEPS
+Δ score: +5
+Δ steps: +125
+
+2009
+Baseline:  64 / 1198 / STAGNATION_DETECTED
+Recovery:  93 / 2000 / MAX_STEPS
+Δ score: +29
+Δ steps: +802
+```
+
+Average improvement among the three actual recovery episodes:
+
+```text
++14 score
++397 steps
+```
+
+The other 22 seeds did not trigger recovery.
+
+Their baseline and recovery results remained identical.
+
+This is useful control evidence:
+
+> When STAGNATION does not occur, the recovery harness does not disturb normal fixed EAT_SAFE_FOOD behavior.
+
+Current evidence therefore supports:
+
+```text
+CREATE_SPACE as whole-run primary policy:
+poor fit
+
+CREATE_SPACE as short STAGNATION recovery:
+promising
+```
+
+However:
+
+```text
+actual recovery episodes = 3
+```
+
+so this is still preliminary evidence rather than proof of universal recovery effectiveness.
+
+### Unresolved failure class
+
+Several controlled runs terminated through:
+
+```text
+NO_MOVE
+```
+
+before STAGNATION recovery could trigger.
+
+Current recovery evidence therefore does NOT demonstrate a solution for:
+
+```text
+rapid trap
+NO_MOVE
+death-before-trigger
+```
+
 ### Board-geometry comparability warning
 
-Current local benchmark geometry:
+Current benchmark geometry:
 
 ```text
 32×12 / 384 cells
@@ -1353,17 +1909,7 @@ Historical results collected under:
 32×24 / 768 cells
 ```
 
-are not directly comparable to new results.
-
-This is true even when:
-
-```text
-seed
-policy
-maxSteps
-```
-
-appear identical.
+are not directly comparable.
 
 The state space, occupancy ratio, mobility, reachable-cell counts, food candidate rejection behavior, and time-to-fill are different.
 
@@ -1378,28 +1924,50 @@ Historical SAFE_CHASE-default runs are also not directly comparable with the cur
 ```text
 npm run test:danger
 npm run test:stagnation
+npm run test:create-space
 npm run build
 ```
 
-Current fixture files:
+Current focused fixture files include:
 
 ```text
 src/agent/__tests__/danger-monitor-fixtures.ts
 src/agent/__tests__/stagnation-budget-fixtures.ts
+src/agent/__tests__/create-space-fixtures.ts
 ```
 
-There is not currently a package script for a full:
+CREATE_SPACE fixtures verify:
 
 ```text
-path-planner
-snake-simulator
-safe-food
-CREATE_SPACE
-FOLLOW_TAIL
-ESCAPE
+Fixture A:
+SPACE beats FOOD
+
+- one legal move is closer to food
+- another has strictly more exact reachable space
+- CREATE_SPACE must choose the larger-space move
 ```
 
-fixture suite.
+```text
+Fixture B:
+FOOD breaks a SPACE tie
+
+- two candidate moves have equal reachable space
+- one has better food progress
+- CREATE_SPACE must choose the better-food move
+```
+
+```text
+Fixture C:
+SAFE_CHASE regression
+
+- existing SAFE_CHASE weighted behavior remains intact
+```
+
+Current CREATE_SPACE fixture status:
+
+```text
+3/3 PASS
+```
 
 BUILD PASS is not runtime proof.
 
@@ -1444,6 +2012,18 @@ stagnationCategory
 
 Do not confuse a trigger snapshot with current live state.
 
+The current UI can therefore reveal an important class of failure:
+
+```text
+Danger already collapsed
+while
+Last Trigger is still '-'
+and
+Live Stag is still far below 80
+```
+
+This is now a real observed runtime phenomenon, not just a theoretical concern.
+
 ---
 
 ## 23. Current Known Limitations / Open Work
@@ -1457,7 +2037,6 @@ PRE_TRAP / SituationAssessment trigger
 multi-step danger lookahead beyond current one-step survivability
 dedicated survival / escape planner
 FOLLOW_TAIL policy
-CREATE_SPACE policy
 ESCAPE policy
 Hamiltonian / safe-cycle endgame mode
 A* planner
@@ -1465,25 +2044,77 @@ formal board-full WIN / completion semantics
 full fixed GameSnapshot planner fixture suite
 ```
 
+CREATE_SPACE is now IMPLEMENTED.
+
 Current important limitations:
 
-1. **Safe food is heuristic, not proof.** Head→tail reachability after eating can still lead to later death.
+1. **Safe food is heuristic, not proof.**
 
-2. **SAFE_CHASE is still one-step Greedy.** Body-aware open space is useful but not a route/survival planner.
+   Head→tail reachability after eating can still lead to later death.
 
-3. **Danger is observational.** DEAD_END_IMMINENT can be detected when no survivable move already exists and does not currently trigger Qwen.
+2. **SAFE_CHASE is still one-step Greedy.**
 
-4. **PRESSURED=40 is provisional pure logic only.** Current runtime does not use it as an early trigger.
+   Body-aware open space is useful but not a route/survival planner.
 
-5. **No dedicated survival fallback planner exists.** Unsafe food still falls back to Greedy behavior in EAT_SAFE_FOOD.
+3. **CREATE_SPACE is not a whole-run replacement for EAT_SAFE_FOOD.**
 
-6. **Debug type declaration drift remains.** Runtime `getAgentInfo()` exposes more fields than `src/global.d.ts`.
+   Longer fixed-policy evidence shows substantially worse long-run score/survival when CREATE_SPACE is used continuously.
 
-7. **Board dimensions currently have duplicate ownership.** GameEngine derives dimensions from canvas/grid geometry while AgentController uses explicit COLS/ROWS constants. They are currently synchronized at 32×12, but a stale Agent `ROWS=24` value caused a confirmed runtime wall-collision bug during the half-height migration.
+4. **CREATE_SPACE recovery evidence is promising but still small.**
 
-8. **Current Danger thresholds/evidence were historically observed on a different board geometry.** Absolute 32×24 evidence must not be copied directly into 32×12 trigger rules.
+   Current controlled evidence contains only three actual STAGNATION recovery episodes.
 
-Future policy names must remain marked FUTURE until real deterministic executor/controller behavior exists.
+   All three succeeded, but 3/3 is not enough to claim universal reliability.
+
+5. **The 40-step automatic recovery lifecycle exists only in `runRecoveryBenchmark()`.**
+
+   Normal runtime does not automatically run CREATE_SPACE for exactly 40 steps after STAGNATION.
+
+6. **Normal Qwen CREATE_SPACE integration is code-complete, but natural selection evidence is incomplete.**
+
+   Qwen can be prompted to choose CREATE_SPACE, the LM response validator accepts it, and AgentController can assign it.
+
+   A natural normal-runtime episode where Qwen independently chose CREATE_SPACE has not yet been captured.
+
+7. **Danger remains observational.**
+
+   DEAD_END_IMMINENT does not directly trigger Qwen.
+
+8. **Current trigger timing can be too late.**
+
+   A real runtime death was observed with:
+
+```text
+Strategy = EAT_SAFE_FOOD
+Last Trigger = -
+Live Stag = 18 / 80
+LLM Calls = 0
+Danger = DEAD_END_IMMINENT
+Reachable = 1
+GAME-OVER
+```
+
+   Therefore some deaths occur before LOOP/STAGNATION can summon Qwen.
+
+9. **NO_MOVE remains an unresolved failure class.**
+
+   Controlled recovery runs contain multiple NO_MOVE terminations where STAGNATION recovery never triggered.
+
+10. **No dedicated survival fallback planner exists.**
+
+    Unsafe food still ultimately relies on current local fallback behavior.
+
+11. **Debug type declaration drift may still exist for rich AgentInfo telemetry.**
+
+    Benchmark/debug method signatures are synced, but runtime AgentInfo can expose more telemetry fields than the debug declaration models.
+
+12. **Board dimensions still have duplicate ownership.**
+
+    GameEngine derives board size from canvas/grid geometry while AgentController has explicit COLS/ROWS constants.
+
+13. **Historical Danger evidence used a different board geometry.**
+
+    Absolute 32×24 thresholds must not be copied directly into 32×12 trigger rules.
 
 ---
 
@@ -1503,54 +2134,136 @@ B. Trigger / Situation Assessment
 
 Do not add a new policy and a new trigger in the same experiment unless the interaction itself is the explicit research target.
 
-Suggested order from current `fec2ee4` source state:
+### 0. Controlled 32×12 baseline — ESTABLISHED
+
+Current benchmark tooling now distinguishes:
 
 ```text
-0. Establish a controlled 32×12 research baseline
-   - confirm benchmark semantics
-   - distinguish adaptive vs fixed-policy evidence
-   - audit board-full / WIN semantics before completion work
-
-1. CREATE_SPACE
-   - design as a deterministic local policy
-   - primary objective: improve future usable space, not food progress
-   - implement locally first
-   - add focused fixtures / controlled states
-   - compare against EAT_SAFE_FOOD / SAFE_CHASE under controlled conditions
-   - only then expose it to Qwen
-
-2. FOLLOW_TAIL
-   - implement as a semantically distinct deterministic policy
-   - use tail/body structure to reorganize safely and buy time
-   - fixture / benchmark before Qwen integration
-
-3. Death-window telemetry research
-   - collect evidence before changing triggers
-   - measure survivableMoveCount
-   - reachable-space trend / normalized reachable evidence
-   - safe-food rejection reason
-   - LOW_MOBILITY persistence
-   - policy active at each point
-   - distance-to-death / recovery
-
-4. PRE_TRAP / SituationAssessment
-   - telemetry first
-   - validate predictive value and false-positive rate
-   - only then consider PRE_TRAP → Qwen optimization
-
-5. ESCAPE
-   - design from observed failure states
-   - multi-step survival reasoning rather than another renamed Greedy
-   - fixture / controlled benchmark
-   - Qwen integration only after local evidence
-
-6. SAFE_CYCLE / Hamiltonian completion mode
-   - treat primarily as endgame/completion capability
-   - keep separate from normal Qwen primitive control
-   - pair with explicit board-full completion semantics if required
+normal adaptive runtime
+fixed-policy benchmark
+SafeBFS injection benchmark
+temporary recovery benchmark
 ```
 
-Current intended strategic architecture:
+Current controlled benchmark semantics are sufficient for small deterministic strategy comparisons.
+
+Board-full / formal WIN semantics remain open.
+
+### 1. CREATE_SPACE capability — IMPLEMENTED / INITIAL EVIDENCE COMPLETE
+
+Completed:
+
+```text
+deterministic local CREATE_SPACE policy
+exact uncapped space-first objective
+focused fixtures
+fixed-policy benchmark
+temporary STAGNATION recovery benchmark
+Qwen high-level policy integration
+```
+
+Current conclusion:
+
+```text
+whole-run CREATE_SPACE:
+poor fit
+
+temporary STAGNATION recovery:
+promising
+```
+
+Natural normal-runtime Qwen selection of CREATE_SPACE still needs observation.
+
+### 2. Death-window telemetry research — CURRENT NEXT
+
+A real runtime death demonstrates:
+
+```text
+DEAD_END_IMMINENT
+Reachable = 1
+Live Stag = 18 / 80
+Last Trigger = -
+LLM Calls = 0
+GAME-OVER
+```
+
+Therefore existing LOOP/STAGNATION triggers can be too late.
+
+Next research should inspect the window BEFORE collapse using existing telemetry:
+
+```text
+survivableMoveCount
+reachableCells
+reachable ratio
+reachable-space trend
+LOW_MOBILITY persistence
+safe-food rejection reason
+active policy
+distance-to-death
+```
+
+Do not immediately hardcode:
+
+```text
+DEAD_END_IMMINENT → Qwen
+```
+
+At DEAD_END_IMMINENT, recovery may already be impossible.
+
+### 3. PRE_TRAP / SituationAssessment
+
+Telemetry first.
+
+Identify earlier candidate signals such as:
+
+```text
+persistent LOW_MOBILITY
+survivableMoveCount deterioration
+rapid reachable-space collapse
+repeated safe-food failure
+```
+
+Then measure:
+
+```text
+lead time before death
+false-positive rate
+recovery success
+extra Qwen calls
+```
+
+Only after evidence should PRE_TRAP become a Qwen trigger.
+
+### 4. FOLLOW_TAIL
+
+Implement as a semantically distinct deterministic policy.
+
+Intent:
+
+```text
+use tail/body structure
+reorganize safely
+buy time
+avoid immediate food obsession
+```
+
+Fixture / benchmark before Qwen integration.
+
+### 5. ESCAPE
+
+Design from observed failure states.
+
+Must perform multi-step survival reasoning rather than become another renamed Greedy policy.
+
+Fixture / controlled benchmark before Qwen integration.
+
+### 6. SAFE_CYCLE / Hamiltonian completion mode
+
+Treat as a separate endgame/completion capability.
+
+Pair with explicit board-full completion semantics if required.
+
+Current intended architecture remains:
 
 ```text
 Qwen
@@ -1575,7 +2288,7 @@ with:
 SAFE_CHASE
 ```
 
-remaining as a general-purpose heuristic/fallback if still useful.
+remaining as a general-purpose heuristic / fallback if still useful.
 
 Potential endgame/completion mode:
 
@@ -1587,7 +2300,7 @@ Qwen should not regress into normal per-tick primitive direction control.
 
 ---
 
-## 25. Success Criteria for Future Planner Changes
+## 25. Success Criteria for Future Planner / Trigger Changes
 
 Prefer evidence from:
 
@@ -1603,9 +2316,13 @@ Useful measures:
 ```text
 median food collected
 median survival steps
-LOOP/STAGNATION frequency
+LOOP frequency
+STAGNATION frequency
+NO_MOVE frequency
 Qwen calls
 Qwen calls per food
+recoveryTriggered
+recoveryCompleted
 safe-BFS usage
 fallback reasons
 engine game-over vs non-game-over termination
@@ -1623,13 +2340,60 @@ reachable trend
 survivable-move trend
 ```
 
+### Current CREATE_SPACE capability evidence
+
+Whole-run CREATE_SPACE:
+
+```text
+not preferred
+```
+
+Current STAGNATION recovery evidence:
+
+```text
+3 actual recovery episodes
+3 triggered
+3 completed
+3 improved score
+3 improved survival
+3 converted STAGNATION → MAX_STEPS
+```
+
+This is promising but not yet statistically broad.
+
+### Current trigger evidence
+
+The question:
+
+> Does death usually have a deterministic, observable pre-trap / space-collapse window early enough for a strategy change to matter?
+
+now has at least one strong real-runtime motivation:
+
+```text
+GAME-OVER occurred
+while
+Last Trigger = -
+Live Stag = 18 / 80
+LLM Calls = 0
+Danger = DEAD_END_IMMINENT
+Reachable = 1
+```
+
+This proves:
+
+> The current 80-step stagnation route is not sufficient to expose every dangerous state to Qwen.
+
+It does NOT yet prove which earlier signal should become the trigger.
+
+The next experiment should measure the death window rather than immediately implement a threshold.
+
 Most important capability question:
 
 > Can local deterministic logic safely solve states that require temporarily moving away from food, reorganizing around the body, or explicitly surviving danger without turning Qwen into a primitive per-tick driver?
 
 Most important trigger question:
 
-> Does death usually have a deterministic, observable pre-trap / space-collapse window early enough for a strategy change to matter?
+> Is there a repeatable warning window before NO_MOVE / DEAD_END where a high-level strategy switch still has enough time to help?
 
 Do not judge a planner from one lucky high-score run.
 
@@ -1639,14 +2403,25 @@ Do not judge a planner from one lucky high-score run.
 
 The local Qwen can context-drift in long sessions.
 
+Observed context capacity:
+
+```text
+~40960 tokens
+```
+
+A full read of a large controller plus PROJECT_MAP / broad repository search can overflow that context.
+
 Warning signs:
 
 ```text
 re-reads same files
 repeats Thought / Grep / Read loops
 opens legacy paths
+reads PROJECT_MAP for a focused implementation task
+runs broad Grep across the repo
 re-checks after BUILD PASS
 starts a second verification pass without need
+manually simulates BFS / large state search in reasoning
 ```
 
 When observed:
@@ -1668,7 +2443,7 @@ classification
 decision criteria
 ```
 
-because audit exists to discover the cause/design.
+because audit exists to discover cause/design.
 
 Still:
 
@@ -1679,6 +2454,16 @@ avoid full-file reads
 inspect 1–3 relevant files
 STOP when evidence is sufficient
 ```
+
+If the task targets a large file:
+
+```text
+locate exact symbol
+→ narrow range read
+→ STOP when answer is known
+```
+
+Do not read PROJECT_MAP for a focused symbol-level implementation unless it is actually needed.
 
 ### Implementation mode — single-point strike
 
@@ -1736,38 +2521,42 @@ For UI-only work, do not broadly read PROJECT_MAP or the source tree unless arch
 
 ## 27. Runtime / Test Discipline
 
-* BUILD PASS ≠ RUNTIME PASS.
-* EDIT PASS ≠ BUILD PASS.
-* TEST PASS ≠ RUNTIME PASS.
-* Manual runtime observation is preferred for actual Snake/Qwen behavior when practical.
-* Avoid Playwright while Snake is actively using LM Studio / the same GPU.
-* If reload/navigation resets Score, Steps, or LLM Calls, the before/after sample is invalid.
-* Prefer pure TypeScript fixtures for deterministic local logic.
-* Do not rerun expensive old benchmarks unless a behavior-changing patch invalidates the comparison.
-* Do not infer 32×12 behavior from old 32×24 runtime statistics without a controlled reason.
+- BUILD PASS ≠ RUNTIME PASS.
+- EDIT PASS ≠ BUILD PASS.
+- TEST PASS ≠ RUNTIME PASS.
+- Manual runtime observation is preferred for actual Snake/Qwen behavior when practical.
+- Avoid Playwright while Snake is actively using LM Studio / the same GPU.
+- If reload/navigation resets Score, Steps, or LLM Calls, the before/after sample is invalid.
+- Prefer pure TypeScript fixtures for deterministic local logic.
+- Do not rerun expensive old benchmarks unless a behavior-changing patch invalidates the comparison.
+- Do not infer 32×12 behavior from old 32×24 runtime statistics without a controlled reason.
+- Benchmark batches should be kept small enough to avoid browser/OpenCode context instability.
+- If a runtime batch partially completes, preserve completed seeds and resume only remaining seeds when evidence supports doing so.
+- Do not treat `qwenRequested` / `qwenExecuted` telemetry fields as proof that Qwen was actually called; those names are also used in local strategy / fallback paths.
 
 ---
 
 ## 28. Fast File Guide
 
-| Task                                             | Read first                                |
-| ------------------------------------------------ | ----------------------------------------- |
-| Bootstrap / debug API / canvas geometry          | `src/main.ts`, `src/global.d.ts`          |
-| Engine / collision / RNG                         | `src/game/engine.ts`, `src/game/types.ts` |
-| Agent primary flow / triggers / Agent dimensions | `src/agent/agent-controller.ts`           |
-| Strategy types                                   | `src/agent/types.ts`                      |
-| SAFE_CHASE scoring                               | `src/agent/strategy-executor.ts`          |
-| Immediate legality                               | `src/agent/safety-layer.ts`               |
-| BFS                                              | `src/agent/path-planner.ts`               |
-| Virtual path simulation                          | `src/agent/snake-simulator.ts`            |
-| Safe food validation                             | `src/agent/safe-food-validator.ts`        |
-| Danger assessment                                | `src/agent/danger-monitor.ts`             |
-| Dynamic stagnation budget                        | `src/agent/stagnation-budget.ts`          |
-| LM SSE / strategy response                       | `src/agent/lm-studio-client.ts`           |
-| Active Control / Thinking DOM                    | `src/agent-panel.ts`                      |
-| Active layout / UI styling                       | `src/style.css`                           |
-| Start/game Canvas rendering                      | `src/game/renderer.ts`                    |
-| Workflow / Git / tests                           | `AGENTS.md`                               |
+| Task | Read first |
+| --- | --- |
+| Bootstrap / debug API / canvas geometry | `src/main.ts`, `src/global.d.ts` |
+| Engine / collision / RNG | `src/game/engine.ts`, `src/game/types.ts` |
+| Agent primary flow / triggers / Agent dimensions | `src/agent/agent-controller.ts` |
+| Strategy types | `src/agent/types.ts` |
+| SAFE_CHASE / CREATE_SPACE execution | `src/agent/strategy-executor.ts` |
+| Immediate legality | `src/agent/safety-layer.ts` |
+| BFS | `src/agent/path-planner.ts` |
+| Virtual path simulation | `src/agent/snake-simulator.ts` |
+| Safe food validation | `src/agent/safe-food-validator.ts` |
+| Danger assessment | `src/agent/danger-monitor.ts` |
+| Dynamic stagnation budget | `src/agent/stagnation-budget.ts` |
+| LM SSE / strategy response validation | `src/agent/lm-studio-client.ts` |
+| Qwen strategy assignment / trigger flow | `src/agent/agent-controller.ts` |
+| Active Control / Thinking DOM | `src/agent-panel.ts` |
+| Active layout / UI styling | `src/style.css` |
+| Start/game Canvas rendering | `src/game/renderer.ts` |
+| Workflow / Git / tests | `AGENTS.md` |
 
 Avoid broad repository discovery if the task maps cleanly to this table.
 
@@ -1818,14 +2607,15 @@ A layout change should only be documented when it affects current runtime owners
 Use this mental model:
 
 ```text
-1. Read PROJECT_MAP.md first.
-2. Read AGENTS.md for OpenCode workflow discipline.
+1. Read latest PROJECT_MAP.md first.
+2. Read latest AGENTS.md for OpenCode workflow discipline.
 3. Treat CURRENT LOCAL SOURCE / RUNTIME as higher authority.
 4. Check local git status when local-vs-GitHub distinction matters.
 5. Ignore legacy duplicate files unless explicitly relevant.
 6. Read only ACTIVE files needed for the current task.
-7. Do not mix architecture phases in one patch.
-8. If source changes architecture, reconcile PROJECT_MAP at an appropriate checkpoint.
+7. For large files, locate exact symbols and read narrow ranges only.
+8. Do not mix architecture phases in one patch.
+9. If source changes architecture, reconcile PROJECT_MAP at an appropriate checkpoint.
 ```
 
 For board-related work, explicitly verify both:
@@ -1837,44 +2627,167 @@ Agent logical dimensions
 
 Do not assume changing canvas geometry automatically updates AgentController constants.
 
+For Qwen integration work, preserve:
+
+```text
+Qwen = high-level policy choice
+Local TypeScript = per-tick execution
+SafetyLayer = immediate legality
+GameEngine = physical state
+```
+
 ---
 
 ## 31. High-Confidence Anchors
 
 ```text
-Current local source checkpoint: fec2ee4
-Entry:                    src/main.ts
-Framework:                Vanilla TypeScript + Vite + Canvas 2D
-Canvas:                   640×240
-Grid:                     20 px
-Board:                    32×12 / 384 cells
-Agent board constants:    COLS=32 / ROWS=12
-AgentController:          src/agent/agent-controller.ts
-Default policy:           EAT_SAFE_FOOD
-Implemented policies:     SAFE_CHASE | EAT_SAFE_FOOD
-Greedy executor:          src/agent/strategy-executor.ts
-BFS planner:              src/agent/path-planner.ts
-Virtual simulator:        src/agent/snake-simulator.ts
-Safe-food validator:      src/agent/safe-food-validator.ts
-Danger monitor:           src/agent/danger-monitor.ts
-Stagnation budget:        src/agent/stagnation-budget.ts
-LM client:                src/agent/lm-studio-client.ts
-Active UI:                src/agent-panel.ts + src/style.css
-Renderer:                 src/game/renderer.ts
-Panel layout:             Thinking | Snake | Control = 2:6:2
-Game frame:               8:3, vertically centered
-LM streaming:             reasoning_content + content SSE
-Normal stagnation mode:   DYNAMIC
-Local benchmark stagnation: FIXED = 80
-SafeBFS injection:         bypasses normal LOOP/progress/stagnation lifecycle
-Danger trigger Qwen:      NO
-PRESSURED=40 early use:   NO
-CREATE_SPACE:             NOT IMPLEMENTED
-FOLLOW_TAIL:              NOT IMPLEMENTED
-ESCAPE:                   NOT IMPLEMENTED
-SAFE_CYCLE/Hamiltonian:   NOT IMPLEMENTED
-Debug API:                window.__snakeDebug
-Legacy moves[1..6]:       fallback path, not healthy primary control
+Latest pushed source checkpoint:
+                          fec2ee4
+
+Latest pushed docs checkpoint:
+                          407b19c
+
+Current local working tree:
+                          newer than pushed source
+                          contains uncheckpointed architecture changes
+
+Entry:
+                          src/main.ts
+
+Framework:
+                          Vanilla TypeScript + Vite + Canvas 2D
+
+Canvas:
+                          640×240
+
+Grid:
+                          20 px
+
+Board:
+                          32×12 / 384 cells
+
+Agent board constants:
+                          COLS=32 / ROWS=12
+
+AgentController:
+                          src/agent/agent-controller.ts
+
+Default policy:
+                          EAT_SAFE_FOOD
+
+Implemented policies:
+                          EAT_SAFE_FOOD
+                          SAFE_CHASE
+                          CREATE_SPACE
+
+CREATE_SPACE:
+                          IMPLEMENTED
+                          deterministic space-first
+                          exact uncapped reachable-space primary
+                          food-progress tie-break
+
+CREATE_SPACE whole-run evidence:
+                          poor fit vs EAT_SAFE_FOOD at 2000-step horizon
+
+CREATE_SPACE recovery evidence:
+                          promising
+                          3/3 triggered STAGNATION episodes completed
+                          all 3 improved score and survival
+
+Qwen CREATE_SPACE:
+                          CODE-PATH IMPLEMENTED
+                          prompt option
+                          LM validation
+                          controller assignment
+                          local execution
+                          natural normal-runtime selection not yet captured
+
+Greedy executor:
+                          src/agent/strategy-executor.ts
+
+BFS planner:
+                          src/agent/path-planner.ts
+
+Virtual simulator:
+                          src/agent/snake-simulator.ts
+
+Safe-food validator:
+                          src/agent/safe-food-validator.ts
+
+Danger monitor:
+                          src/agent/danger-monitor.ts
+
+Stagnation budget:
+                          src/agent/stagnation-budget.ts
+
+LM client:
+                          src/agent/lm-studio-client.ts
+
+Active UI:
+                          src/agent-panel.ts + src/style.css
+
+Renderer:
+                          src/game/renderer.ts
+
+Panel layout:
+                          Thinking | Snake | Control = 2:6:2
+
+Game frame:
+                          8:3, vertically centered
+
+LM streaming:
+                          reasoning_content + content SSE
+
+Normal stagnation mode:
+                          DYNAMIC
+
+Fixed benchmark stagnation:
+                          FIXED = 80
+
+runLocalBenchmark:
+                          optional fixed policy
+                          EAT_SAFE_FOOD | SAFE_CHASE | CREATE_SPACE
+
+runRecoveryBenchmark:
+                          IMPLEMENTED
+                          first STAGNATION
+                          → CREATE_SPACE bounded recovery
+                          → EAT_SAFE_FOOD
+                          benchmark-only experiment
+
+SafeBFS injection:
+                          bypasses normal LOOP/progress/stagnation lifecycle
+
+Danger trigger Qwen:
+                          NO
+
+PRESSURED=40 early runtime trigger:
+                          NO
+
+PRE_TRAP trigger:
+                          NOT IMPLEMENTED
+
+Current trigger issue:
+                          real runtime death observed before
+                          LOOP/STAGNATION Qwen trigger
+                          DEAD_END_IMMINENT / Reachable=1
+                          while Live Stag=18/80 and LLM Calls=0
+
+FOLLOW_TAIL:
+                          NOT IMPLEMENTED
+
+ESCAPE:
+                          NOT IMPLEMENTED
+
+SAFE_CYCLE/Hamiltonian:
+                          NOT IMPLEMENTED
+
+Debug API:
+                          window.__snakeDebug
+
+Legacy moves[1..6]:
+                          fallback path
+                          not healthy primary control
 ```
 
 ---

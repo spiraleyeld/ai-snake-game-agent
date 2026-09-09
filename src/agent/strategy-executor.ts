@@ -19,6 +19,44 @@ export function nextMove(
 
   if (legal.length === 0) return null;
 
+  // CREATE_SPACE: deterministic space-first ordering with uncapped flood-fill
+  if (strategy.policy === 'CREATE_SPACE') {
+    let bestDir: Direction | null = null;
+    let bestSpace = -1;
+    let bestFoodProgress = -Infinity;
+
+    for (const dir of legal) {
+      let nx = headX;
+      let ny = headY;
+      switch (dir) {
+        case 'Up': ny -= 1; break;
+        case 'Down': ny += 1; break;
+        case 'Left': nx -= 1; break;
+        case 'Right': nx += 1; break;
+      }
+
+      const space = countOpenSpaceUncapped(nx, ny, snakeBody, cols, rows);
+      const foodProgress = getFoodProgress(nx, ny, headX, headY, foodX, foodY);
+
+      if (space > bestSpace) {
+        bestDir = dir;
+        bestSpace = space;
+        bestFoodProgress = foodProgress;
+      } else if (space === bestSpace && bestDir !== null) {
+        if (foodProgress > bestFoodProgress) {
+          bestDir = dir;
+          bestFoodProgress = foodProgress;
+        } else if (foodProgress === bestFoodProgress) {
+          if (dir === currentDirection && bestDir !== currentDirection) {
+            bestDir = dir;
+          }
+        }
+      }
+    }
+
+    return bestDir;
+  }
+
   const params = strategy.params;
   let bestDir: Direction | null = null;
   let bestScore = -Infinity;
@@ -138,4 +176,47 @@ function countOpenSpace(
   }
 
   return count;
+}
+
+function countOpenSpaceUncapped(
+  startX: number,
+  startY: number,
+  snakeBody: { x: number; y: number }[],
+  cols: number,
+  rows: number
+): number {
+  const bodySet = new Set<string>();
+  for (const seg of snakeBody) {
+    bodySet.add(`${seg.x},${seg.y}`);
+  }
+
+  let count = 0;
+  const visited = new Set<string>();
+  const queue: [number, number][] = [[startX, startY]];
+
+  while (queue.length > 0) {
+    const [x, y] = queue.shift()!;
+    const key = `${x},${y}`;
+    if (visited.has(key)) continue;
+    visited.add(key);
+
+    if (x < 0 || x >= cols || y < 0 || y >= rows) continue;
+    if (bodySet.has(key)) continue;
+    count++;
+
+    queue.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+  }
+
+  return count;
+}
+
+function getFoodProgress(
+  nx: number, ny: number,
+  headX: number, headY: number,
+  foodX: number | null, foodY: number | null
+): number {
+  if (foodX === null || foodY === null) return 0;
+  const currentDist = Math.abs(headX - foodX) + Math.abs(headY - foodY);
+  const newDist = Math.abs(nx - foodX) + Math.abs(ny - foodY);
+  return currentDist - newDist;
 }

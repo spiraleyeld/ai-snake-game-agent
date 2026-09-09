@@ -51,8 +51,9 @@ window.__snakeDebug = {
     engine.setSeed(seed);
   },
   restart: (): void => engine.restart(),
-  runLocalBenchmark: (seed: number, maxSteps: number): Promise<BenchmarkResult> => agentController.runLocalBenchmark(seed, maxSteps),
+  runLocalBenchmark: (seed: number, maxSteps: number, policy?: 'EAT_SAFE_FOOD' | 'SAFE_CHASE' | 'CREATE_SPACE'): Promise<BenchmarkResult> => agentController.runLocalBenchmark(seed, maxSteps, policy),
   runSafeBfsBenchmark: (seed: number, maxSteps: number): Promise<SafeBfsBenchmarkResult> => agentController.runSafeBfsBenchmark(seed, maxSteps),
+  runRecoveryBenchmark: (seed: number, maxSteps: number, recoverySteps?: number): Promise<BenchmarkResult & { recoveryTriggered: boolean; recoveryCompleted: boolean }> => agentController.runRecoveryBenchmark(seed, maxSteps, recoverySteps),
 };
 
 const scoreDisplay = document.getElementById('score-display')!;

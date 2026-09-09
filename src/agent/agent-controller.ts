@@ -141,6 +141,9 @@ export class AgentController {
   // Last trigger reason (persisted, not cleared after optimization)
   private _lastTrigger: string = '-';
 
+  // Fixed-policy benchmark flag (Phase 3)
+  private _fixedPolicy: boolean = false;
+
   // Danger telemetry from last runStep tick
   private dangerTelemetry: { dl: DangerLevel | '-'; lmc: number; smc: number; rc: number } | null = null;
 
@@ -211,9 +214,9 @@ export class AgentController {
   setSpeedMultiplier(_multiplier: number): void {
   }
 
-  private createDefaultStrategy(): ActiveStrategy {
+  private createDefaultStrategy(policy?: 'EAT_SAFE_FOOD' | 'SAFE_CHASE' | 'CREATE_SPACE'): ActiveStrategy {
     return {
-      policy: 'EAT_SAFE_FOOD',
+      policy: policy ?? 'EAT_SAFE_FOOD',
       params: {
         foodWeight: 1.0,
         openSpaceWeight: 0.4,
@@ -249,12 +252,12 @@ export class AgentController {
     return seen.size;
   }
 
-  private initializeLocalRun(): void {
+  private initializeLocalRun(policy?: 'EAT_SAFE_FOOD' | 'SAFE_CHASE' | 'CREATE_SPACE'): void {
     this._paused = false;
     this.steps = 0;
     this.plannedMoves = [];
     this.lastFoodPos = null;
-    this.activeStrategy = this.createDefaultStrategy();
+    this.activeStrategy = this.createDefaultStrategy(policy);
     this.memory.resetForNewGame();
     this.resetLoopHistory();
     this.resetProgressTracking();
@@ -265,6 +268,7 @@ export class AgentController {
     this.llmCallsCount = 0;
     this.currentPlanLength = 0;
     this.movesFromCurrentPlan = 0;
+    this._fixedPolicy = policy !== undefined;
     this.currentInfo.snapshotStepsSinceProgress = null;
     this.currentInfo.snapshotFoodDistCurrent = null;
     this.currentInfo.snapshotFoodDistBest = null;
@@ -441,7 +445,9 @@ export class AgentController {
                   this.captureTriggerSnapshot();
                   this.resetLoopHistory();
                   this.stepsSinceLastScore = 0;
-                  this.activeStrategy = null;
+                  if (!this._fixedPolicy) {
+                    this.activeStrategy = null;
+                  }
                 }
               }
 
@@ -452,7 +458,9 @@ export class AgentController {
                 this.failedStrategy = this.activeStrategy ? { ...this.activeStrategy } : null;
                 this.failureReason = 'STAGNATION_DETECTED';
                 this.captureTriggerSnapshot();
-                this.activeStrategy = null;
+                if (!this._fixedPolicy) {
+                  this.activeStrategy = null;
+                }
                 this.resetProgressTracking();
                 this.resetLoopHistory();
               }
@@ -464,20 +472,58 @@ export class AgentController {
           // Safety layer overrode strategy candidate — disable strategy, fall back to Qwen path next tick
           this.resetLoopHistory();
           this.stepsSinceLastScore = 0;
-          this.activeStrategy = null;
+          if (!this._fixedPolicy) {
+            this.activeStrategy = null;
+          }
           this.resetProgressTracking();
         }
       } else {
         // Strategy executor returned null — disable strategy, fall back to Qwen path next tick
         this.resetLoopHistory();
         this.stepsSinceLastScore = 0;
-        this.activeStrategy = null;
+        if (this._fixedPolicy) {
+          direction = pickSafeDirection(head.x, head.y, COLS, ROWS, state.direction, state.snake);
+          if (direction !== null) {
+            this.engine!.setDirection(direction);
+            const moved = this.engine!.step();
+
+            if (moved) {
+              this.steps++;
+              this.currentInfo.steps = this.steps;
+              this.memory.addMove(head.x, head.y, direction, state.score, state.food?.x ?? null, state.food?.y ?? null);
+            }
+
+            const newState = this.getCurrentState();
+            if (newState) {
+              this.currentInfo.score = newState.score;
+              this.currentInfo.highScore = newState.highScore || 0;
+              this.currentInfo.currentDirection = direction;
+            }
+
+            this.currentInfo.planRemaining = 0;
+            this.currentInfo.llmCalls = this.llmCallsCount;
+            this.currentInfo.planLength = 0;
+            this.currentInfo.movesPerLlm = 0;
+
+            if (!moved && this.isGameOver()) {
+              this.running = false;
+              const deathReason = this.getDeathReason(state);
+              this.setStatus('game-over');
+              this.memory.recordGameEnd(state.score, deathReason);
+            }
+
+            this.updateUI();
+            return moved;
+          }
+        } else {
+          this.activeStrategy = null;
+        }
         this.resetProgressTracking();
       }
     }
 
     // Optimization: try to recover from failed strategy before Qwen fallback
-    if (this.failedStrategy) {
+    if (this.failedStrategy && !this._fixedPolicy) {
       const optimized = await this.optimizeStrategy(state);
       if (optimized) {
         return false;
@@ -487,7 +533,7 @@ export class AgentController {
     // Check replan conditions (Qwen fallback path)
     const foodChanged = this.shouldReplan(state);
 
-    if (this.plannedMoves.length === 0 || foodChanged) {
+    if (!this._fixedPolicy && (this.plannedMoves.length === 0 || foodChanged)) {
       await this.replan(state);
     } else {
       return this.executePlannedMove(head, state, legalMoves);
@@ -750,6 +796,7 @@ export class AgentController {
     this.resetProgressTracking();
     this.failedStrategy = null;
     this.failureReason = null;
+    this._fixedPolicy = false;
     this.recentHeadPositions = [];
     this.currentLowMobilityStreak = 0;
     this.maxLowMobilityStreak = 0;
@@ -942,7 +989,7 @@ export class AgentController {
 
     prompt += `\n\nPOLICY CHOICE\nSAFE_CHASE - Existing weighted local Greedy behavior. Use when no confirmed safe food path exists, or when the local planner says the current food route is unsafe/unavailable.\nEAT_SAFE_FOOD - Commit to the existing Safe-BFS food planner. Each tick uses evaluateFoodPath() and executes only path[0]. Use when Local Planner Evidence confirms a safe food path and pursuing that food is the appropriate immediate tactic.\n\nDecision rules:\n1. Use LOCAL PLANNER EVIDENCE as real evidence.\n2. If Food Path Safe = NO: Qwen MUST NOT choose EAT_SAFE_FOOD.\n3. If Food Path Exists = NO: Qwen MUST NOT choose EAT_SAFE_FOOD.\n4. If a safe path exists: Qwen may choose EAT_SAFE_FOOD to stop local Greedy orbiting and commit to the validated food route.\n5. SAFE_CHASE remains available when Qwen intentionally prefers local weighted movement.\n6. The five params must still be returned for BOTH policies. They remain useful for SAFE_CHASE and fallback behavior.`;
 
-    prompt += `\n\nReturn exactly ONE policy:\n- "SAFE_CHASE"\n- "EAT_SAFE_FOOD"\nIf SAFE_CHASE is chosen, use exactly:\n"policy":"SAFE_CHASE"\nExample valid JSON response:\n{"policy":"EAT_SAFE_FOOD","params":{"foodWeight":1.0,"openSpaceWeight":0.4,"wallPenalty":0.3,"bodyPenalty":0.8,"recentVisitPenalty":0.0},"reason":"short explanation"}`;
+    prompt += `\n\nReturn exactly ONE policy:\n- "SAFE_CHASE"\n- "EAT_SAFE_FOOD"\n- "CREATE_SPACE"\nIf SAFE_CHASE is chosen, use exactly:\n"policy":"SAFE_CHASE"\nExample valid JSON response:\n{"policy":"EAT_SAFE_FOOD","params":{"foodWeight":1.0,"openSpaceWeight":0.4,"wallPenalty":0.3,"bodyPenalty":0.8,"recentVisitPenalty":0.0},"reason":"short explanation"}`;
 
     this.setStatus('thinking');
     this.currentInfo.thinking = '';
@@ -959,7 +1006,7 @@ export class AgentController {
     const endTime = performance.now();
     const latencyMs = Math.round(endTime - startTime);
 
-    if (response && (response.policy === 'SAFE_CHASE' || response.policy === 'EAT_SAFE_FOOD') && response.params) {
+    if (response && (response.policy === 'SAFE_CHASE' || response.policy === 'EAT_SAFE_FOOD' || response.policy === 'CREATE_SPACE') && response.params) {
       this.activeStrategy = {
         policy: response.policy,
         params: response.params,
@@ -1109,13 +1156,14 @@ export class AgentController {
 
   async runLocalBenchmark(
     seed: number,
-    maxSteps: number
+    maxSteps: number,
+    policy?: 'EAT_SAFE_FOOD' | 'SAFE_CHASE' | 'CREATE_SPACE'
   ): Promise<BenchmarkResult> {
     if (!this.engine) {
       throw new Error('runLocalBenchmark requires an attached GameEngine');
     }
 
-    this.initializeLocalRun();
+    this.initializeLocalRun(policy);
     this.engine.setSeed(seed);
     this.engine.start();
     this.engine.setManualMode(true);
@@ -1197,6 +1245,129 @@ export class AgentController {
       recentUnique,
       gameOver,
       terminationReason,
+    };
+  }
+
+  async runRecoveryBenchmark(
+    seed: number,
+    maxSteps: number,
+    recoverySteps: number = 40
+  ): Promise<BenchmarkResult & { recoveryTriggered: boolean; recoveryCompleted: boolean }> {
+    if (!this.engine) {
+      throw new Error('runRecoveryBenchmark requires an attached GameEngine');
+    }
+
+    this.initializeLocalRun('EAT_SAFE_FOOD');
+    this._fixedPolicy = true;
+    this.engine.setSeed(seed);
+    this.engine.start();
+    this.engine.setManualMode(true);
+
+    this.running = true;
+    this._agentStatus = 'playing';
+
+    let gameOver = false;
+    let terminationReason: BenchmarkTerminationReason = 'MAX_STEPS';
+    let phase: 'EAT_SAFE_FOOD' | 'CREATE_SPACE' = 'EAT_SAFE_FOOD';
+    let stagnationEncountered = false;
+    let createSpaceStepsRemaining = 0;
+    let recoveryTriggered = false;
+    let recoveryCompleted = false;
+
+    for (let i = 0; i < maxSteps; i++) {
+      const stepOk = await this.runStep(undefined, 'FIXED');
+
+      if (!stepOk) {
+        if (this.isGameOver()) {
+          gameOver = true;
+          terminationReason = 'ENGINE_GAME_OVER';
+          break;
+        }
+
+        terminationReason = 'NO_MOVE';
+        break;
+      }
+
+      if (this._lastTrigger === 'STAGNATION_DETECTED' && !stagnationEncountered) {
+        stagnationEncountered = true;
+        recoveryTriggered = true;
+        phase = 'CREATE_SPACE';
+        createSpaceStepsRemaining = recoverySteps;
+        this.resetProgressTracking();
+        this._lastTrigger = '-';
+      }
+
+      if (phase === 'CREATE_SPACE') {
+        createSpaceStepsRemaining--;
+
+        if (createSpaceStepsRemaining <= 0) {
+          phase = 'EAT_SAFE_FOOD';
+          recoveryCompleted = true;
+          this.activeStrategy = this.createDefaultStrategy('EAT_SAFE_FOOD');
+          this.resetProgressTracking();
+          this._lastTrigger = '-';
+        }
+      }
+
+      if (this._lastTrigger === 'STAGNATION_DETECTED' && stagnationEncountered) {
+        terminationReason = 'STAGNATION_DETECTED';
+        break;
+      }
+
+      if (this._lastTrigger === 'LOOP_DETECTED') {
+        terminationReason = 'LOOP_DETECTED';
+        break;
+      }
+
+      if (this.isGameOver()) {
+        gameOver = true;
+        terminationReason = 'ENGINE_GAME_OVER';
+        break;
+      }
+    }
+
+    const currentInfo = this.currentInfo;
+
+    let noProgressSteps: number;
+    let foodDistanceCurrent: number | null;
+    let foodDistanceBest: number | null;
+    let recentUnique: number;
+
+    if (this._lastTrigger === 'STAGNATION_DETECTED' || this._lastTrigger === 'LOOP_DETECTED') {
+      noProgressSteps = currentInfo.snapshotStepsSinceProgress ?? 0;
+      foodDistanceCurrent = currentInfo.snapshotFoodDistCurrent;
+      foodDistanceBest = currentInfo.snapshotFoodDistBest;
+      recentUnique = currentInfo.snapshotRecentUnique ?? 0;
+    } else {
+      noProgressSteps = this.stepsSinceProgress;
+
+      const liveState = this.getCurrentState();
+      if (liveState && liveState.food) {
+        const head = liveState.snake[0];
+        foodDistanceCurrent = Math.abs(liveState.food.x - head.x) + Math.abs(liveState.food.y - head.y);
+      } else {
+        foodDistanceCurrent = null;
+      }
+
+      foodDistanceBest = this.bestFoodDistance < Infinity ? Math.round(this.bestFoodDistance) : null;
+
+      const uniqueCount = this.getRecentUniqueCount();
+      recentUnique = uniqueCount;
+    }
+
+    return {
+      seed,
+      score: currentInfo.score,
+      steps: this.steps,
+      firstTrigger: this._lastTrigger === '-' || this._lastTrigger === 'STAGNATION_DETECTED' || this._lastTrigger === 'LOOP_DETECTED' ? this._lastTrigger : '-',
+      noProgressSteps,
+      foodDistanceCurrent,
+      foodDistanceBest,
+      recentUnique,
+      gameOver,
+      terminationReason,
+      recoveryTriggered,
+      recoveryCompleted,
     };
   }
 
