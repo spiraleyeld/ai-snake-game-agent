@@ -58,16 +58,7 @@ export class AgentPanel {
           <div class="stat-row"><span class="label">QWEN BEST</span><span id="info-best" class="value best-val">0</span></div>
           <div class="stat-row"><span class="label">Steps</span><span id="info-steps" class="value steps-val">0</span></div>
           <div class="stat-row"><span class="label">Risk</span><span id="info-risk" class="value risk-val">0.10</span></div>
-          <div class="stat-row"><span class="label">Safety</span><span id="info-reason" class="value reason-val">OK</span></div>
-        </div>
-      </div>
-
-      <div class="section">
-        <h4 class="section-title">DECISION</h4>
-        <div class="decision-grid">
-          <div class="decision-row"><span class="label">Current</span><span id="info-dir" class="value dir-val">→ RIGHT</span></div>
-          <div class="decision-row"><span class="label">Qwen Wants</span><span id="info-requested" class="value req-val">↑ UP</span></div>
-          <div class="decision-row"><span class="label">Executed</span><span id="info-executed" class="value exec-val">↑ UP</span></div>
+          <div class="stat-row safety-row"><span class="label">Safety</span><span id="info-reason" class="value safety-right"></span></div>
         </div>
       </div>
 
@@ -94,8 +85,13 @@ export class AgentPanel {
         <div class="stats-grid">
           <div class="stat-row"><span class="label">Last Trigger</span><span id="info-last-trigger" class="value trigger-val">-</span></div>
           <div class="stat-row"><span class="label">No Progress</span><span id="info-stagnation" class="value stagnation-val">0</span></div>
+          <div class="stat-row"><span class="label">Live Stag</span><span id="info-live-stag" class="value stagnation-val">0 / 80</span></div>
+          <div class="stat-row"><span class="label">Budget</span><span id="info-budget" class="value stagnation-val">NORMAL</span></div>
           <div class="stat-row"><span class="label">Food Dist</span><span id="info-food-dist" class="value dist-val">-</span></div>
           <div class="stat-row"><span class="label">Unique Heads</span><span id="info-unique-heads" class="value unique-val">-</span></div>
+          <div class="stat-row"><span class="label">Danger</span><span id="info-danger-level" class="value danger-val">-</span></div>
+          <div class="stat-row"><span class="label">Mobility</span><span id="info-mobility" class="value mobility-val">0 / 0</span></div>
+          <div class="stat-row"><span class="label">Reachable</span><span id="info-reachable" class="value reachable-val">0</span></div>
         </div>
       </div>
 
@@ -120,12 +116,13 @@ export class AgentPanel {
 
       <div class="section section-actions">
         <div id="btn-agent-ctrl" class="action-btn action-btn-agent">START AGENT</div>
-        <div id="btn-pause-resume" class="action-btn action-btn-pause" style="display:none;">PAUSE</div>
+        <div id="btn-pause-resume" class="action-btn action-btn-pause disabled">PAUSE</div>
       </div>
     `;
 
     this.panelEl = panel;
-    document.body.appendChild(panel);
+    const layout = document.getElementById('layout-container');
+    (layout || document.body).appendChild(panel);
   }
 
   private createThinkingPanel(): void {
@@ -146,7 +143,8 @@ export class AgentPanel {
     `;
 
     this.thinkingPanelEl = panel;
-    document.body.appendChild(panel);
+    const layout = document.getElementById('layout-container');
+    (layout || document.body).appendChild(panel);
   }
 
   private bindEvents(): void {
@@ -170,7 +168,7 @@ export class AgentPanel {
       if (connected) {
         this.btnAgentEl.classList.add('active');
         this.btnAgentEl.textContent = 'AGENT ACTIVE';
-        this.btnPauseResumeEl.style.display = '';
+        this.btnPauseResumeEl.classList.remove('disabled');
         this.btnPauseResumeEl.textContent = 'PAUSE';
         this.loopRunning = true;
         this.paused = false;
@@ -225,7 +223,7 @@ export class AgentPanel {
         this.btnAgentEl!.classList.remove('active');
         this.btnAgentEl!.textContent = 'RESTART AGENT';
         this.btnAgentEl!.classList.remove('disabled');
-        this.btnPauseResumeEl!.style.display = 'none';
+        this.btnPauseResumeEl!.classList.add('disabled');
         return;
       }
 
@@ -269,9 +267,6 @@ export class AgentPanel {
     set('info-score', String(info.score));
     set('info-best', String(info.highScore));
     set('info-steps', String(info.steps));
-    set('info-dir', info.currentDirection);
-    set('info-requested', info.qwenRequested);
-    set('info-executed', info.qwenExecuted);
     set('info-reason', info.safetyReason);
     set('info-risk', info.risk.toFixed(2));
     set('info-strategy', info.strategy || '-');
@@ -336,6 +331,9 @@ export class AgentPanel {
     const stagnationVal = info.snapshotStepsSinceProgress !== null ? String(info.snapshotStepsSinceProgress) : String(info.stagnationSteps);
     setTelemetry('info-stagnation', stagnationVal);
 
+    setTelemetry('info-live-stag', `${info.liveNoProgress} / ${info.effectiveStagnationThreshold}`);
+    setTelemetry('info-budget', info.stagnationCategory);
+
     if (info.snapshotFoodDistCurrent !== null && info.snapshotFoodDistBest !== null) {
       setTelemetry('info-food-dist', `${info.snapshotFoodDistCurrent} / ${info.snapshotFoodDistBest}`);
     } else {
@@ -349,44 +347,30 @@ export class AgentPanel {
       setTelemetry('info-unique-heads', info.recentUniqueRatio);
     }
 
-    // Direction arrow display
-    const dirEl = this.panelEl?.querySelector('#info-dir') as HTMLElement;
-    if (dirEl) {
-      const arrows: Record<string, string> = { Up: '↑', Down: '↓', Left: '←', Right: '→' };
-      const nameMap: Record<string, string> = { Up: 'UP', Down: 'DOWN', Left: 'LEFT', Right: 'RIGHT' };
-      const arrow = arrows[info.currentDirection] || '?';
-      const name = nameMap[info.currentDirection] || info.currentDirection;
-      dirEl.textContent = `${arrow} ${name}`;
-    }
+    // Danger telemetry display
+    const dangerVal = info.dangerLevel !== '-' ? info.dangerLevel : '-';
+    setTelemetry('info-danger-level', dangerVal);
 
-    // Executed direction arrow
-    const execEl = this.panelEl?.querySelector('#info-executed') as HTMLElement;
-    if (execEl) {
-      const arrows: Record<string, string> = { Up: '↑', Down: '↓', Left: '←', Right: '→' };
-      const nameMap: Record<string, string> = { Up: 'UP', Down: 'DOWN', Left: 'LEFT', Right: 'RIGHT' };
-      const arrow = arrows[info.qwenExecuted] || '?';
-      const name = nameMap[info.qwenExecuted] || info.qwenExecuted;
-      execEl.textContent = `${arrow} ${name}`;
-    }
+    const mobilityStr = `${info.legalMoveCount} / ${info.survivableMoveCount}`;
+    setTelemetry('info-mobility', mobilityStr);
 
-    // Requested direction arrow
-    const reqEl = this.panelEl?.querySelector('#info-requested') as HTMLElement;
-    if (reqEl) {
-      const arrows: Record<string, string> = { Up: '↑', Down: '↓', Left: '←', Right: '→' };
-      const nameMap: Record<string, string> = { Up: 'UP', Down: 'DOWN', Left: 'LEFT', Right: 'RIGHT' };
-      if (info.qwenRequested === 'ERROR') {
-        reqEl.textContent = 'ERR';
-      } else {
-        const arrow = arrows[info.qwenRequested as keyof typeof arrows] || '?';
-        const name = nameMap[info.qwenRequested as keyof typeof nameMap] || info.qwenRequested;
-        reqEl.textContent = `${arrow} ${name}`;
+    setTelemetry('info-reachable', String(info.reachableCells));
+
+    // Danger color coding
+    const dangerEl = this.panelEl?.querySelector('#info-danger-level') as HTMLElement | null;
+    if (dangerEl) {
+      switch (info.dangerLevel) {
+        case 'SAFE': dangerEl.style.color = '#3fb950'; break;
+        case 'LOW_MOBILITY': dangerEl.style.color = '#d29922'; break;
+        case 'DEAD_END_IMMINENT': dangerEl.style.color = '#f85149'; break;
+        default: dangerEl.style.color = '';
       }
     }
 
     // Update button state based on status
     const btnAgent = this.panelEl?.querySelector('#btn-agent-ctrl') as HTMLDivElement | null;
     if (btnAgent && info.status === 'playing' && !this.paused) {
-      btnAgent.textContent = 'AGENT active';
+      btnAgent.textContent = 'AGENT ACTIVE';
     } else if (btnAgent && info.status === 'game-over') {
       // Handled by runLoop cleanup
     }

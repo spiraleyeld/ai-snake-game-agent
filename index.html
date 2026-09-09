@@ -4,10 +4,18 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>snake-game</title>
+    <title>Snake Game</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="layout-container">
+      <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="hud">
+          <span id="score-display">Score: 0</span>
+          <span id="high-score-display">Best: 0</span>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

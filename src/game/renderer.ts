@@ -183,7 +183,7 @@ export class Renderer {
 
       ctx.font = '14px "Courier New", monospace';
       ctx.fillStyle = COLORS.textSecondary;
-      ctx.fillText('Arrow Keys / WASD to move', w / 2, h / 2 + 90);
+      ctx.fillText('Use START AGENT to begin', w / 2, h / 2 + 90);
       ctx.fillText('Space to pause', w / 2, h / 2 + 115);
     } else if (state === GameState.Paused) {
       ctx.font = 'bold 36px "Courier New", monospace';

@@ -74,7 +74,7 @@ function evaluateScore(
   }
 
   // Open space: flood fill from new position (capped at 200 for performance)
-  const openSpace = countOpenSpace(nx, ny, cols, rows);
+  const openSpace = countOpenSpace(nx, ny, snakeBody, cols, rows);
   score += openSpace * params.openSpaceWeight;
 
   // Wall risk: inverse of minimum distance to any wall edge
@@ -111,9 +111,15 @@ function evaluateScore(
 function countOpenSpace(
   startX: number,
   startY: number,
+  snakeBody: { x: number; y: number }[],
   cols: number,
   rows: number
 ): number {
+  const bodySet = new Set<string>();
+  for (const seg of snakeBody) {
+    bodySet.add(`${seg.x},${seg.y}`);
+  }
+
   let count = 0;
   const visited = new Set<string>();
   const queue: [number, number][] = [[startX, startY]];
@@ -125,6 +131,7 @@ function countOpenSpace(
     visited.add(key);
 
     if (x < 0 || x >= cols || y < 0 || y >= rows) continue;
+    if (bodySet.has(key)) continue;
     count++;
 
     queue.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);

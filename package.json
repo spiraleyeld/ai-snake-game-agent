@@ -4,11 +4,16 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:danger": "tsx src/agent/__tests__/danger-monitor-fixtures.ts",
+    "test:stagnation": "tsx src/agent/__tests__/stagnation-budget-fixtures.ts"
   },
   "devDependencies": {
+    "@types/node": "^26.5.0",
+    "playwright": "^1.63.0",
+    "tsx": "^4.23.13",
     "typescript": "~6.0.2",
     "vite": "^8.2.2"
   }

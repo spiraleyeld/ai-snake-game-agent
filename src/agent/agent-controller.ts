@@ -5,6 +5,12 @@ import { LmStudioClient } from './lm-studio-client.js';
 import { validateDirection, getLegalMoves, pickSafeDirection } from './safety-layer.js';
 import { AgentMemory } from './agent-memory.js';
 import { nextMove as strategyNextMove } from './strategy-executor.js';
+import { evaluateFoodPath } from './safe-food-validator.js';
+import { stagnationBudget } from './stagnation-budget.js';
+import type { DangerLevel } from './danger-monitor.js';
+import { assessDanger } from './danger-monitor.js';
+
+export type StagnationMode = 'FIXED' | 'DYNAMIC';
 
 const COLS = 32;
 const ROWS = 24;
@@ -40,6 +46,49 @@ export interface AgentInfo {
   snapshotFoodDistCurrent: number | null;
   snapshotFoodDistBest: number | null;
   snapshotRecentUnique: number | null;
+  dangerLevel: DangerLevel | '-';
+  legalMoveCount: number;
+  survivableMoveCount: number;
+  reachableCells: number;
+  liveNoProgress: number;
+  effectiveStagnationThreshold: number;
+  stagnationCategory: 'NORMAL' | 'REORGANIZING' | 'PRESSURED' | 'EMERGENCY' | '-';
+  currentLowMobilityStreak: number;
+  maxLowMobilityStreak: number;
+  lastLowStreakBeforeDeadEnd: number;
+  deadEndEventCount: number;
+}
+
+export type BenchmarkTerminationReason =
+  | 'ENGINE_GAME_OVER'
+  | 'LOOP_DETECTED'
+  | 'STAGNATION_DETECTED'
+  | 'NO_MOVE'
+  | 'MAX_STEPS';
+
+export interface BenchmarkResult {
+  seed: number;
+  score: number;
+  steps: number;
+  firstTrigger: string;
+  noProgressSteps: number;
+  foodDistanceCurrent: number | null;
+  foodDistanceBest: number | null;
+  recentUnique: number;
+  gameOver: boolean;
+  terminationReason: BenchmarkTerminationReason;
+}
+
+export interface SafeBfsBenchmarkResult extends BenchmarkResult {
+  safeBfsMoves: number;
+  greedyFallbackMoves: number;
+  fallbackReasons: {
+    NO_FOOD: number;
+    NO_FOOD_PATH: number;
+    SIMULATION_INVALID: number;
+    FOOD_NOT_REACHED: number;
+    NO_TAIL_ESCAPE: number;
+  };
 }
 
 export class AgentController {
@@ -62,6 +111,7 @@ export class AgentController {
 
   // Loop/stagnation detection for persistent strategies
   private STAGNATION_THRESHOLD = 80;
+
   private HISTORY_SIZE = 160;
   private LOOP_REPEAT_THRESHOLD = 2;
   private loopHistory: string[] = [];
@@ -75,6 +125,8 @@ export class AgentController {
   private progressFoodTarget: { x: number; y: number } | null = null;
   private bestFoodDistance: number = Infinity;
   private stepsSinceProgress: number = 0;
+  private _effectiveStagnationThreshold: number = 80;
+  private _stagnationCategory: 'NORMAL' | 'REORGANIZING' | 'PRESSURED' | 'EMERGENCY' | '-' = 'NORMAL';
 
   // Telemetry tracking
   private llmCallsCount: number = 0;
@@ -88,6 +140,16 @@ export class AgentController {
 
   // Last trigger reason (persisted, not cleared after optimization)
   private _lastTrigger: string = '-';
+
+  // Danger telemetry from last runStep tick
+  private dangerTelemetry: { dl: DangerLevel | '-'; lmc: number; smc: number; rc: number } | null = null;
+
+  // Danger episode tracking (telemetry only)
+  private currentLowMobilityStreak: number = 0;
+  private maxLowMobilityStreak: number = 0;
+  private lastLowStreakBeforeDeadEnd: number = 0;
+  private deadEndEventCount: number = 0;
+  private previousDangerLevel: DangerLevel | '-' = '-';
 
   constructor(config?: Partial<AgentConfig>, callbacks?: AgentCallbacks) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -124,6 +186,17 @@ export class AgentController {
       snapshotFoodDistCurrent: null,
       snapshotFoodDistBest: null,
       snapshotRecentUnique: null,
+      dangerLevel: '-',
+      legalMoveCount: 0,
+      survivableMoveCount: 0,
+      reachableCells: 0,
+      liveNoProgress: 0,
+      effectiveStagnationThreshold: 80,
+      stagnationCategory: 'NORMAL',
+      currentLowMobilityStreak: 0,
+      maxLowMobilityStreak: 0,
+      lastLowStreakBeforeDeadEnd: 0,
+      deadEndEventCount: 0,
     };
   }
 
@@ -176,15 +249,7 @@ export class AgentController {
     return seen.size;
   }
 
-  async startGame(): Promise<boolean> {
-    if (!this.engine) return false;
-
-    const connected = await this.client.getModels().then(models => models.length > 0);
-    if (!connected) {
-      this.setStatus('idle');
-      return false;
-    }
-
+  private initializeLocalRun(): void {
     this._paused = false;
     this.steps = 0;
     this.plannedMoves = [];
@@ -194,6 +259,28 @@ export class AgentController {
     this.resetLoopHistory();
     this.resetProgressTracking();
     this.recentHeadPositions = [];
+    this.failedStrategy = null;
+    this.failureReason = null;
+    this._lastTrigger = '-';
+    this.llmCallsCount = 0;
+    this.currentPlanLength = 0;
+    this.movesFromCurrentPlan = 0;
+    this.currentInfo.snapshotStepsSinceProgress = null;
+    this.currentInfo.snapshotFoodDistCurrent = null;
+    this.currentInfo.snapshotFoodDistBest = null;
+    this.currentInfo.snapshotRecentUnique = null;
+  }
+
+  async startGame(): Promise<boolean> {
+    if (!this.engine) return false;
+
+    const connected = await this.client.getModels().then(models => models.length > 0);
+    if (!connected) {
+      this.setStatus('idle');
+      return false;
+    }
+
+    this.initializeLocalRun();
     this.engine.start();
     this.engine.setManualMode(true);
     this.setStatus('playing');
@@ -209,7 +296,7 @@ export class AgentController {
     return true;
   }
 
-  async runStep(): Promise<boolean> {
+  async runStep(directionSource?: (state: GameSnapshot) => Direction | null, _stagnationMode: StagnationMode = 'DYNAMIC'): Promise<boolean> {
     if (!this.engine || !this.running || this._paused) return false;
 
     const state = this.getCurrentState();
@@ -218,6 +305,29 @@ export class AgentController {
     const head = state.snake[0];
     const legalMoves = getLegalMoves(head.x, head.y, COLS, ROWS, state.direction, state.snake);
 
+    const dangerTelemetry = assessDanger(head.x, head.y, state.direction, state.snake, state.food, COLS, ROWS);
+
+    this.dangerTelemetry = { dl: dangerTelemetry.dangerLevel, lmc: dangerTelemetry.legalMoveCount, smc: dangerTelemetry.survivableMoveCount, rc: dangerTelemetry.reachableCells };
+
+    // Danger episode telemetry tracking (per NORMAL runtime tick)
+    const currentDanger = this.dangerTelemetry.dl;
+    if (currentDanger === 'LOW_MOBILITY') {
+      this.currentLowMobilityStreak += 1;
+      if (this.currentLowMobilityStreak > this.maxLowMobilityStreak) {
+        this.maxLowMobilityStreak = this.currentLowMobilityStreak;
+      }
+    } else if (currentDanger === 'SAFE') {
+      this.currentLowMobilityStreak = 0;
+    } else if (currentDanger === 'DEAD_END_IMMINENT' && this.previousDangerLevel !== 'DEAD_END_IMMINENT') {
+      this.lastLowStreakBeforeDeadEnd = this.currentLowMobilityStreak;
+      this.deadEndEventCount += 1;
+      this.currentLowMobilityStreak = 0;
+    } else if (currentDanger === 'DEAD_END_IMMINENT' && this.previousDangerLevel === 'DEAD_END_IMMINENT') {
+      // Repeated DEAD_END ticks: do NOT increment deadEndEventCount, keep streak at 0
+    }
+
+    this.previousDangerLevel = currentDanger;
+
     if (legalMoves.length === 0) {
       this.running = false;
       this.setStatus('game-over');
@@ -225,20 +335,75 @@ export class AgentController {
       return false;
     }
 
-    // Phase 2: Persistent strategy execution path
-    if (this.activeStrategy) {
-      const candidate = strategyNextMove(
-        head.x,
-        head.y,
-        state.snake,
-        state.food?.x || null,
-        state.food?.y || null,
-        state.direction,
-        this.activeStrategy,
-        COLS,
-        ROWS,
-        this.recentHeadPositions
-      );
+    let direction: Direction | null = null;
+
+    if (directionSource) {
+      direction = directionSource(state);
+      if (direction !== null) {
+        this.engine!.setDirection(direction);
+        const moved = this.engine!.step();
+
+        if (moved) {
+          this.steps++;
+          this.currentInfo.steps = this.steps;
+          this.memory.addMove(head.x, head.y, direction, state.score, state.food?.x ?? null, state.food?.y ?? null);
+        }
+
+        const newState = this.getCurrentState();
+        if (newState) {
+          this.currentInfo.score = newState.score;
+          this.currentInfo.highScore = newState.highScore || 0;
+          this.currentInfo.currentDirection = direction;
+        }
+
+        this.currentInfo.planRemaining = 0;
+        this.currentInfo.llmCalls = this.llmCallsCount;
+        this.currentInfo.planLength = 0;
+        this.currentInfo.movesPerLlm = 0;
+
+        if (!moved && this.isGameOver()) {
+          this.running = false;
+          const deathReason = this.getDeathReason(state);
+          this.setStatus('game-over');
+          this.memory.recordGameEnd(state.score, deathReason);
+        }
+
+        this.updateUI();
+        return moved;
+      }
+
+      return false;
+    } else if (this.activeStrategy) {
+      let candidate: Direction | null = null;
+
+      if (this.activeStrategy.policy === 'EAT_SAFE_FOOD') {
+        const evaluation = evaluateFoodPath(
+          state.snake,
+          state.food,
+          state.direction,
+          COLS,
+          ROWS
+        );
+
+        if (evaluation.safe && evaluation.path !== null && evaluation.path.length > 0) {
+          candidate = evaluation.path[0];
+        }
+      }
+
+      if (candidate === null) {
+        candidate = strategyNextMove(
+          head.x,
+          head.y,
+          state.snake,
+          state.food?.x ?? null,
+          state.food?.y ?? null,
+          state.direction,
+          this.activeStrategy,
+          COLS,
+          ROWS,
+          this.recentHeadPositions
+        );
+      }
 
       if (candidate !== null) {
         const safetyResult = validateDirection(
@@ -264,6 +429,7 @@ export class AgentController {
               if (scoreIncreased || this.lastLoopScore === -1) {
                 this.resetLoopHistory();
                 this.stepsSinceLastScore = 0;
+                this.lastLoopScore = newStateAfterMove.score;
               } else {
                 this.stepsSinceLastScore++;
                 this.recordStrategyState(head, state);
@@ -280,7 +446,7 @@ export class AgentController {
               }
 
               // Progress watchdog: stagnation detection
-              const progressStagnated = this.updateProgressTracking(state, newStateAfterMove);
+              const progressStagnated = this.updateProgressTracking(state, newStateAfterMove, _stagnationMode);
               if (progressStagnated) {
                 this._lastTrigger = 'STAGNATION_DETECTED';
                 this.failedStrategy = this.activeStrategy ? { ...this.activeStrategy } : null;
@@ -585,6 +751,11 @@ export class AgentController {
     this.failedStrategy = null;
     this.failureReason = null;
     this.recentHeadPositions = [];
+    this.currentLowMobilityStreak = 0;
+    this.maxLowMobilityStreak = 0;
+    this.lastLowStreakBeforeDeadEnd = 0;
+    this.deadEndEventCount = 0;
+    this.previousDangerLevel = '-';
     this.currentInfo = this.getDefaultInfo();
     this.updateUI();
   }
@@ -593,6 +764,8 @@ export class AgentController {
     this.progressFoodTarget = null;
     this.bestFoodDistance = Infinity;
     this.stepsSinceProgress = 0;
+    this._effectiveStagnationThreshold = 80;
+    this._stagnationCategory = 'NORMAL';
   }
 
   private resetLoopHistory(): void {
@@ -615,12 +788,16 @@ export class AgentController {
     this.currentInfo.snapshotRecentUnique = histLen > 0 ? uniqueCount : null;
   }
 
-  private computeStateSignature(head: { x: number; y: number }, direction: Direction, food: { x: number; y: number } | null, score: number): string {
-    return `${head.x},${head.y},${direction},${food ? food.x : -1},${food ? food.y : -1},${score}`;
+  private computeStateSignature(head: { x: number; y: number }, direction: Direction, food: { x: number; y: number } | null, score: number, snake: { x: number; y: number }[], recentHeadPositions: { x: number; y: number }[], params: { foodWeight: number; openSpaceWeight: number; wallPenalty: number; bodyPenalty: number; recentVisitPenalty: number }): string {
+    const bodyStr = snake.map(s => `${s.x},${s.y}`).join('|');
+    const recentPosStr = recentHeadPositions.map(p => `${p.x},${p.y}`).join(';');
+    return `${head.x},${head.y},${direction},${food ? food.x : -1},${food ? food.y : -1},${score},body:${bodyStr},recent:${recentPosStr},fw:${params.foodWeight},osw:${params.openSpaceWeight},wp:${params.wallPenalty},bp:${params.bodyPenalty},rvp:${params.recentVisitPenalty}`;
   }
 
   private detectLoop(): boolean {
-    if (this.stepsSinceLastScore < this.STAGNATION_THRESHOLD) {
+    // Both FIXED and DYNAMIC modes use STAGNATION_THRESHOLD for stagnation detection
+    const effectiveThreshold = this.STAGNATION_THRESHOLD;
+    if (this.stepsSinceLastScore < effectiveThreshold) {
       return false;
     }
 
@@ -628,6 +805,7 @@ export class AgentController {
     if (history.length < this.LOOP_REPEAT_THRESHOLD) {
       return false;
     }
+
 
     const lastSignature = history[history.length - 1];
     let totalCount = 0;
@@ -643,11 +821,15 @@ export class AgentController {
   }
 
   private recordStrategyState(head: { x: number; y: number }, state: GameSnapshot): void {
+    const params = this.activeStrategy?.params || { foodWeight: 1.0, openSpaceWeight: 0.4, wallPenalty: 0.3, bodyPenalty: 0.8, recentVisitPenalty: 0.0 };
     const signature = this.computeStateSignature(
       head,
       state.direction,
       state.food,
-      state.score
+      state.score,
+      state.snake,
+      this.recentHeadPositions,
+      params
     );
 
     this.loopHistory.push(signature);
@@ -657,7 +839,7 @@ export class AgentController {
     }
   }
 
-  private updateProgressTracking(state: GameSnapshot, newState: GameSnapshot | null): boolean {
+  private updateProgressTracking(state: GameSnapshot, newState: GameSnapshot | null, mode: StagnationMode = 'FIXED'): boolean {
     const food = state.food;
     if (!food || !this.activeStrategy) {
       return false;
@@ -668,6 +850,8 @@ export class AgentController {
       this.progressFoodTarget = null;
       this.bestFoodDistance = Infinity;
       this.stepsSinceProgress = 0;
+      this._effectiveStagnationThreshold = 80;
+      this._stagnationCategory = 'NORMAL';
       return false;
     }
 
@@ -677,6 +861,8 @@ export class AgentController {
       const head = state.snake[0];
       this.bestFoodDistance = Math.abs(food.x - head.x) + Math.abs(food.y - head.y);
       this.stepsSinceProgress = 0;
+      this._effectiveStagnationThreshold = 80;
+      this._stagnationCategory = 'NORMAL';
       return false;
     }
 
@@ -687,16 +873,47 @@ export class AgentController {
     if (currentDist < this.bestFoodDistance) {
       this.bestFoodDistance = currentDist;
       this.stepsSinceProgress = 0;
+      this._effectiveStagnationThreshold = 80;
+      this._stagnationCategory = 'NORMAL';
     } else {
       this.stepsSinceProgress++;
     }
 
-    // Stagnation detected: no progress toward food for STAGNATION_THRESHOLD steps
-    if (this.stepsSinceProgress >= this.STAGNATION_THRESHOLD) {
-      return true;
+    // FIXED mode: preserve exact old behavior
+    if (mode === 'FIXED') {
+      if (this.stepsSinceProgress >= this.STAGNATION_THRESHOLD) {
+        return true;
+      }
+      return false;
     }
 
-    return false;
+    // DYNAMIC mode: connect REORGANIZING stagnation to normal runtime
+    if (this.stepsSinceProgress < this._effectiveStagnationThreshold) {
+      return false;
+    }
+
+    const foodEval = evaluateFoodPath(state.snake, state.food, state.direction, COLS, ROWS);
+    const rawDanger = this.dangerTelemetry?.dl;
+    const dangerLevel: DangerLevel = rawDanger && rawDanger !== '-' ? rawDanger : 'SAFE';
+    const survivableMoveCount = this.dangerTelemetry?.smc ?? 999;
+    const reachableCells = this.dangerTelemetry?.rc ?? 0;
+
+    const budgetResult = stagnationBudget(
+      dangerLevel,
+      survivableMoveCount,
+      reachableCells,
+      foodEval.safe,
+      foodEval.reason
+    );
+
+    this._stagnationCategory = budgetResult.category;
+
+    if (budgetResult.category === 'REORGANIZING' && budgetResult.threshold > this.stepsSinceProgress) {
+      this._effectiveStagnationThreshold = budgetResult.threshold;
+      return false;
+    }
+
+    return true;
   }
 
   private async optimizeStrategy(state: GameSnapshot): Promise<boolean> {
@@ -716,7 +933,16 @@ export class AgentController {
       prompt += `\nFailure reason: ${this.failureReason}`;
     }
 
-    prompt += `\n\nRespond with compact JSON only:\n{"policy":"SAFE_CHASE","params":{"foodWeight":1.0,"openSpaceWeight":0.4,"wallPenalty":0.3,"bodyPenalty":0.8,"recentVisitPenalty":0.0},"reason":"short explanation"}`;
+    const foodEval = evaluateFoodPath(state.snake, state.food, state.direction, COLS, ROWS);
+    const pathExists = foodEval.path !== null;
+    const pathLength = pathExists ? foodEval.path!.length : 'N/A';
+    const safeStr = foodEval.safe ? 'YES' : 'NO';
+
+    prompt += `\n\nLOCAL PLANNER EVIDENCE\nFood Path Exists: ${pathExists ? 'YES' : 'NO'}\nFood Path Length: ${pathLength}\nFood Path Safe: ${safeStr}\nFood Path Reason: ${foodEval.reason}`;
+
+    prompt += `\n\nPOLICY CHOICE\nSAFE_CHASE - Existing weighted local Greedy behavior. Use when no confirmed safe food path exists, or when the local planner says the current food route is unsafe/unavailable.\nEAT_SAFE_FOOD - Commit to the existing Safe-BFS food planner. Each tick uses evaluateFoodPath() and executes only path[0]. Use when Local Planner Evidence confirms a safe food path and pursuing that food is the appropriate immediate tactic.\n\nDecision rules:\n1. Use LOCAL PLANNER EVIDENCE as real evidence.\n2. If Food Path Safe = NO: Qwen MUST NOT choose EAT_SAFE_FOOD.\n3. If Food Path Exists = NO: Qwen MUST NOT choose EAT_SAFE_FOOD.\n4. If a safe path exists: Qwen may choose EAT_SAFE_FOOD to stop local Greedy orbiting and commit to the validated food route.\n5. SAFE_CHASE remains available when Qwen intentionally prefers local weighted movement.\n6. The five params must still be returned for BOTH policies. They remain useful for SAFE_CHASE and fallback behavior.`;
+
+    prompt += `\n\nReturn exactly ONE policy:\n- "SAFE_CHASE"\n- "EAT_SAFE_FOOD"\nIf SAFE_CHASE is chosen, use exactly:\n"policy":"SAFE_CHASE"\nExample valid JSON response:\n{"policy":"EAT_SAFE_FOOD","params":{"foodWeight":1.0,"openSpaceWeight":0.4,"wallPenalty":0.3,"bodyPenalty":0.8,"recentVisitPenalty":0.0},"reason":"short explanation"}`;
 
     this.setStatus('thinking');
     this.currentInfo.thinking = '';
@@ -733,9 +959,9 @@ export class AgentController {
     const endTime = performance.now();
     const latencyMs = Math.round(endTime - startTime);
 
-    if (response && response.policy === 'SAFE_CHASE' && response.params) {
+    if (response && (response.policy === 'SAFE_CHASE' || response.policy === 'EAT_SAFE_FOOD') && response.params) {
       this.activeStrategy = {
-        policy: 'SAFE_CHASE',
+        policy: response.policy,
         params: response.params,
         startedAtStep: this.steps,
       };
@@ -843,6 +1069,9 @@ export class AgentController {
   private updateUI(): void {
     // Populate diagnostic telemetry fields
     this.currentInfo.stagnationSteps = this.stepsSinceProgress;
+    this.currentInfo.liveNoProgress = this.stepsSinceProgress;
+    this.currentInfo.effectiveStagnationThreshold = this._effectiveStagnationThreshold;
+    this.currentInfo.stagnationCategory = this._stagnationCategory;
 
     const foodDistRatio = this.bestFoodDistance < Infinity
       ? `${this.getBestFoodDistanceDisplay()}`
@@ -855,6 +1084,18 @@ export class AgentController {
 
     this.currentInfo.lastTrigger = this._lastTrigger;
 
+    if (this.dangerTelemetry) {
+      this.currentInfo.dangerLevel = this.dangerTelemetry.dl;
+      this.currentInfo.legalMoveCount = this.dangerTelemetry.lmc;
+      this.currentInfo.survivableMoveCount = this.dangerTelemetry.smc;
+      this.currentInfo.reachableCells = this.dangerTelemetry.rc;
+    }
+
+    this.currentInfo.currentLowMobilityStreak = this.currentLowMobilityStreak;
+    this.currentInfo.maxLowMobilityStreak = this.maxLowMobilityStreak;
+    this.currentInfo.lastLowStreakBeforeDeadEnd = this.lastLowStreakBeforeDeadEnd;
+    this.currentInfo.deadEndEventCount = this.deadEndEventCount;
+
     this.callbacks.onUpdate?.({ ...this.currentInfo });
   }
 
@@ -864,6 +1105,248 @@ export class AgentController {
     const head = state.snake[0];
     const currentDist = Math.abs(state.food.x - head.x) + Math.abs(state.food.y - head.y);
     return `${currentDist} / ${Math.round(this.bestFoodDistance)}`;
+  }
+
+  async runLocalBenchmark(
+    seed: number,
+    maxSteps: number
+  ): Promise<BenchmarkResult> {
+    if (!this.engine) {
+      throw new Error('runLocalBenchmark requires an attached GameEngine');
+    }
+
+    this.initializeLocalRun();
+    this.engine.setSeed(seed);
+    this.engine.start();
+    this.engine.setManualMode(true);
+
+    this.running = true;
+    this._agentStatus = 'playing';
+
+    let gameOver = false;
+    let terminationReason: BenchmarkTerminationReason = 'MAX_STEPS';
+
+    for (let i = 0; i < maxSteps; i++) {
+      const stepOk = await this.runStep(undefined, 'FIXED');
+
+      if (!stepOk) {
+        if (this.isGameOver()) {
+          gameOver = true;
+          terminationReason = 'ENGINE_GAME_OVER';
+          break;
+        }
+
+        terminationReason = 'NO_MOVE';
+        break;
+      }
+
+      if (this._lastTrigger === 'STAGNATION_DETECTED') {
+        terminationReason = 'STAGNATION_DETECTED';
+        break;
+      }
+
+      if (this._lastTrigger === 'LOOP_DETECTED') {
+        terminationReason = 'LOOP_DETECTED';
+        break;
+      }
+
+      if (this.isGameOver()) {
+        gameOver = true;
+        terminationReason = 'ENGINE_GAME_OVER';
+        break;
+      }
+    }
+
+    const currentInfo = this.currentInfo;
+
+    let noProgressSteps: number;
+    let foodDistanceCurrent: number | null;
+    let foodDistanceBest: number | null;
+    let recentUnique: number;
+
+    if (this._lastTrigger === 'STAGNATION_DETECTED' || this._lastTrigger === 'LOOP_DETECTED') {
+      noProgressSteps = currentInfo.snapshotStepsSinceProgress ?? 0;
+      foodDistanceCurrent = currentInfo.snapshotFoodDistCurrent;
+      foodDistanceBest = currentInfo.snapshotFoodDistBest;
+      recentUnique = currentInfo.snapshotRecentUnique ?? 0;
+    } else {
+      noProgressSteps = this.stepsSinceProgress;
+
+      const liveState = this.getCurrentState();
+      if (liveState && liveState.food) {
+        const head = liveState.snake[0];
+        foodDistanceCurrent = Math.abs(liveState.food.x - head.x) + Math.abs(liveState.food.y - head.y);
+      } else {
+        foodDistanceCurrent = null;
+      }
+
+      foodDistanceBest = this.bestFoodDistance < Infinity ? Math.round(this.bestFoodDistance) : null;
+
+      const uniqueCount = this.getRecentUniqueCount();
+      recentUnique = uniqueCount;
+    }
+
+    return {
+      seed,
+      score: currentInfo.score,
+      steps: this.steps,
+      firstTrigger: this._lastTrigger === '-' || this._lastTrigger === 'STAGNATION_DETECTED' || this._lastTrigger === 'LOOP_DETECTED' ? this._lastTrigger : '-',
+      noProgressSteps,
+      foodDistanceCurrent,
+      foodDistanceBest,
+      recentUnique,
+      gameOver,
+      terminationReason,
+    };
+  }
+
+  async runSafeBfsBenchmark(
+    seed: number,
+    maxSteps: number
+  ): Promise<SafeBfsBenchmarkResult> {
+    if (!this.engine) {
+      throw new Error('runSafeBfsBenchmark requires an attached GameEngine');
+    }
+
+    this.initializeLocalRun();
+    this.engine.setSeed(seed);
+    this.engine.start();
+    this.engine.setManualMode(true);
+
+    this.running = true;
+    this._agentStatus = 'playing';
+
+    let gameOver = false;
+    let terminationReason: BenchmarkTerminationReason = 'MAX_STEPS';
+    let safeBfsMoves = 0;
+    let greedyFallbackMoves = 0;
+    const fallbackReasons: {
+      NO_FOOD: number;
+      NO_FOOD_PATH: number;
+      SIMULATION_INVALID: number;
+      FOOD_NOT_REACHED: number;
+      NO_TAIL_ESCAPE: number;
+    } = {
+      NO_FOOD: 0,
+      NO_FOOD_PATH: 0,
+      SIMULATION_INVALID: 0,
+      FOOD_NOT_REACHED: 0,
+      NO_TAIL_ESCAPE: 0,
+    };
+
+    for (let i = 0; i < maxSteps; i++) {
+      const stepOk = await this.runStep((state) => {
+        const evaluation = evaluateFoodPath(
+          state.snake,
+          state.food,
+          state.direction,
+          COLS,
+          ROWS
+        );
+
+        if (
+          evaluation.safe &&
+          evaluation.path !== null &&
+          evaluation.path.length > 0
+        ) {
+          safeBfsMoves++;
+          return evaluation.path[0];
+        }
+
+        if (evaluation.reason !== 'SAFE') {
+          fallbackReasons[evaluation.reason]++;
+        }
+
+        greedyFallbackMoves++;
+
+        const head = state.snake[0];
+
+        return strategyNextMove(
+          head.x,
+          head.y,
+          state.snake,
+          state.food?.x ?? null,
+          state.food?.y ?? null,
+          state.direction,
+          this.activeStrategy!,
+          COLS,
+          ROWS,
+          this.recentHeadPositions
+        );
+      }, 'FIXED');
+
+      if (!stepOk) {
+        if (this.isGameOver()) {
+          gameOver = true;
+          terminationReason = 'ENGINE_GAME_OVER';
+          break;
+        }
+
+        terminationReason = 'NO_MOVE';
+        break;
+      }
+
+      if (this._lastTrigger === 'STAGNATION_DETECTED') {
+        terminationReason = 'STAGNATION_DETECTED';
+        break;
+      }
+
+      if (this._lastTrigger === 'LOOP_DETECTED') {
+        terminationReason = 'LOOP_DETECTED';
+        break;
+      }
+
+      if (this.isGameOver()) {
+        gameOver = true;
+        terminationReason = 'ENGINE_GAME_OVER';
+        break;
+      }
+    }
+
+    const currentInfo = this.currentInfo;
+
+    let noProgressSteps: number;
+    let foodDistanceCurrent: number | null;
+    let foodDistanceBest: number | null;
+    let recentUnique: number;
+
+    if (this._lastTrigger === 'STAGNATION_DETECTED' || this._lastTrigger === 'LOOP_DETECTED') {
+      noProgressSteps = currentInfo.snapshotStepsSinceProgress ?? 0;
+      foodDistanceCurrent = currentInfo.snapshotFoodDistCurrent;
+      foodDistanceBest = currentInfo.snapshotFoodDistBest;
+      recentUnique = currentInfo.snapshotRecentUnique ?? 0;
+    } else {
+      noProgressSteps = this.stepsSinceProgress;
+
+      const liveState = this.getCurrentState();
+      if (liveState && liveState.food) {
+        const head = liveState.snake[0];
+        foodDistanceCurrent = Math.abs(liveState.food.x - head.x) + Math.abs(liveState.food.y - head.y);
+      } else {
+        foodDistanceCurrent = null;
+      }
+
+      foodDistanceBest = this.bestFoodDistance < Infinity ? Math.round(this.bestFoodDistance) : null;
+
+      const uniqueCount = this.getRecentUniqueCount();
+      recentUnique = uniqueCount;
+    }
+
+    return {
+      seed,
+      score: currentInfo.score,
+      steps: this.steps,
+      firstTrigger: this._lastTrigger === '-' || this._lastTrigger === 'STAGNATION_DETECTED' || this._lastTrigger === 'LOOP_DETECTED' ? this._lastTrigger : '-',
+      noProgressSteps,
+      foodDistanceCurrent,
+      foodDistanceBest,
+      recentUnique,
+      gameOver,
+      terminationReason,
+      safeBfsMoves,
+      greedyFallbackMoves,
+      fallbackReasons,
+    };
   }
 }
 

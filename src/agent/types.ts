@@ -66,13 +66,13 @@ export interface PlanResponse {
 }
 
 export interface StrategyUpdateResponse {
-  policy: 'SAFE_CHASE';
+  policy: StrategyPolicy;
   params: ActiveStrategyParams;
   reason: string;
   thinking?: string;
 }
 
-export type StrategyPolicy = 'SAFE_CHASE';
+export type StrategyPolicy = 'SAFE_CHASE' | 'EAT_SAFE_FOOD';
 
 export interface ActiveStrategyParams {
   foodWeight: number;

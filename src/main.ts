@@ -1,60 +1,86 @@
-import './style.css'
-import heroImg from './assets/hero.png'
-import typescriptLogo from './assets/typescript.svg'
-import viteLogo from './assets/vite.svg'
-import { setupCounter } from './counter.ts'
+import { GameEngine } from './game/engine.js';
+import { Renderer } from './game/renderer.js';
+import { InputHandler } from './game/input.js';
+import { GameState as GS } from './game/types.js';
+import type { DebugState, Direction } from './game/types.js';
+import { AgentController } from './agent/agent-controller.js';
+import type { BenchmarkResult, SafeBfsBenchmarkResult } from './agent/agent-controller.js';
+import { AgentPanel } from './agent-panel.js';
+import './style.css';
 
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-<section id="center">
-  <div class="hero">
-    <img src="${heroImg}" class="base" width="170" height="179">
-    <img src="${typescriptLogo}" class="framework" alt="TypeScript logo"/>
-    <img src="${viteLogo}" class="vite" alt="Vite logo" />
-  </div>
-  <div>
-    <h1>Get started</h1>
-    <p>Edit <code>src/main.ts</code> and save to test <code>HMR</code></p>
-  </div>
-  <button id="counter" type="button" class="counter"></button>
-</section>
+const CANVAS_WIDTH = 640;
+const CANVAS_HEIGHT = 480;
 
-<div class="ticks"></div>
+const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
+canvas.width = CANVAS_WIDTH;
+canvas.height = CANVAS_HEIGHT;
 
-<section id="next-steps">
-  <div id="docs">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#documentation-icon"></use></svg>
-    <h2>Documentation</h2>
-    <p>Your questions, answered</p>
-    <ul>
-      <li>
-        <a href="https://vite.dev/" target="_blank">
-          <img class="logo" src="${viteLogo}" alt="" />
-          Explore Vite
-        </a>
-      </li>
-      <li>
-        <a href="https://www.typescriptlang.org" target="_blank">
-          <img class="button-icon" src="${typescriptLogo}" alt="">
-          Learn more
-        </a>
-      </li>
-    </ul>
-  </div>
-  <div id="social">
-    <svg class="icon" role="presentation" aria-hidden="true"><use href="/icons.svg#social-icon"></use></svg>
-    <h2>Connect with us</h2>
-    <p>Join the Vite community</p>
-    <ul>
-      <li><a href="https://github.com/vitejs/vite" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#github-icon"></use></svg>GitHub</a></li>
-      <li><a href="https://chat.vite.dev/" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#discord-icon"></use></svg>Discord</a></li>
-      <li><a href="https://x.com/vite_js" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#x-icon"></use></svg>X.com</a></li>
-      <li><a href="https://bsky.app/profile/vite.dev" target="_blank"><svg class="button-icon" role="presentation" aria-hidden="true"><use href="/icons.svg#bluesky-icon"></use></svg>Bluesky</a></li>
-    </ul>
-  </div>
-</section>
+const engine = new GameEngine({ canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT });
+const renderer = new Renderer(canvas, engine);
+new InputHandler(engine);
 
-<div class="ticks"></div>
-<section id="spacer"></section>
-`
+const agentController = new AgentController();
+agentController.setEngine(engine);
+const agentPanel = new AgentPanel();
+agentPanel.init(agentController);
 
-setupCounter(document.querySelector<HTMLButtonElement>('#counter')!)
+window.__snakeDebug = {
+  getState: (): DebugState => ({
+    snake: engine.snake.map(s => ({ ...s })),
+    food: engine.food ? { ...engine.food } : null,
+    direction: engine.direction,
+    score: engine.score,
+    highScore: engine.highScore,
+    paused: engine.gameState === GS.Paused,
+    gameOver: engine.gameState === GS.GameOver,
+    gameStarted: engine.gameState !== GS.Start,
+    speed: engine.speed,
+    manualMode: engine.manualMode,
+    seed: engine.getSeed(),
+  }),
+  setManualMode: (enabled: boolean): void => {
+    engine.setManualMode(enabled);
+  },
+  setDirection: (direction: Direction): void => {
+    engine.setDirection(direction);
+  },
+  step: (): boolean => engine.step(),
+  reset: (): void => engine.resetToStart(),
+  getAgentInfo: () => agentController.info,
+  setSeed: (seed: number | null): void => {
+    engine.setSeed(seed);
+  },
+  restart: (): void => engine.restart(),
+  runLocalBenchmark: (seed: number, maxSteps: number): Promise<BenchmarkResult> => agentController.runLocalBenchmark(seed, maxSteps),
+  runSafeBfsBenchmark: (seed: number, maxSteps: number): Promise<SafeBfsBenchmarkResult> => agentController.runSafeBfsBenchmark(seed, maxSteps),
+};
+
+const scoreDisplay = document.getElementById('score-display')!;
+const highScoreDisplay = document.getElementById('high-score-display')!;
+
+function updateHUD(): void {
+  const score = engine.getScore();
+  scoreDisplay.textContent = `Score: ${score.current}`;
+  highScoreDisplay.textContent = `Best: ${score.high}`;
+}
+
+let lastHighScore = engine.highScore;
+
+function gameLoop(now: number): void {
+  requestAnimationFrame(gameLoop);
+
+  if (engine.gameState === GS.Playing) {
+    engine.tick(now);
+  }
+
+  renderer.render();
+  updateHUD();
+
+  if (engine.highScore !== lastHighScore) {
+    lastHighScore = engine.highScore;
+    localStorage.setItem('snakeHighScore', String(lastHighScore));
+  }
+}
+
+updateHUD();
+requestAnimationFrame(gameLoop);

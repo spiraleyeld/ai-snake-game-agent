@@ -319,7 +319,8 @@ export class LmStudioClient {
         cleaned = cleaned.replace(/```[\s\S]*?```/g, '').trim();
         const parsed = JSON.parse(cleaned);
 
-        if (parsed.policy !== 'SAFE_CHASE') return null;
+        const validPolicies = ['SAFE_CHASE', 'EAT_SAFE_FOOD'];
+        if (!validPolicies.includes(parsed.policy)) return null;
 
         const params = parsed.params;
         if (!params || typeof params !== 'object') return null;
@@ -353,7 +354,7 @@ export class LmStudioClient {
         }
 
         return {
-          policy: 'SAFE_CHASE',
+          policy: parsed.policy,
           params: clampedParams,
           reason,
           thinking: reasoningText.slice(0, MAX_REASONING_CHARS),
