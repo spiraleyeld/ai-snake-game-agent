@@ -1,9 +1,10 @@
 # BENCHMARK_NOTES — Snake Agent Experiments
 
-> Detailed benchmark and experiment evidence extracted from PROJECT_MAP.md.
+> Detailed benchmark and experiment evidence supporting current architecture decisions.
 > Current board geometry: 32×12 / 384 cells.
 > Use PROJECT_MAP.md for current architecture and ownership.
-> Use this file for benchmark history, seed evidence, and experimental interpretation.
+> Use this file for benchmark evidence and experimental interpretation.
+> Invalidated benchmark conclusions are replaced by corrected evidence rather than retained as active results.
 
 ---
 
@@ -180,19 +181,21 @@ rather than default whole-run control.
 
 ### runRecoveryBenchmark(seed, maxSteps, recoverySteps = 40)
 
-Controlled lifecycle:
+Corrected controlled lifecycle:
 
 ```text
 start fixed EAT_SAFE_FOOD
 
 → first STAGNATION_DETECTED
-→ fresh CREATE_SPACE
+→ assign fresh CREATE_SPACE ActiveStrategy
 → resetProgressTracking()
 → _lastTrigger = '-'
 
-→ run CREATE_SPACE for exactly recoverySteps
+→ run CREATE_SPACE for recoverySteps
+→ repeated STAGNATION does not terminate
+  while CREATE_SPACE recovery is active
 
-→ fresh EAT_SAFE_FOOD
+→ assign fresh EAT_SAFE_FOOD ActiveStrategy
 → resetProgressTracking()
 → _lastTrigger = '-'
 
@@ -201,21 +204,34 @@ start fixed EAT_SAFE_FOOD
 
 Only one CREATE_SPACE recovery episode is allowed per run.
 
-Later STAGNATION terminates normally.
+Later STAGNATION outside the recovery phase terminates normally.
 
 Qwen is disabled for the entire recovery benchmark.
 
-Important:
+Important implementation invariant:
 
 ```text
-This 40-step automatic recovery lifecycle is benchmark-only.
+The benchmark must update activeStrategy itself.
+
+Changing only a local phase variable does not change
+the strategy executed by runStep().
 ```
+
+Important harness invariant:
+
+```text
+STAGNATION_DETECTED during active CREATE_SPACE recovery
+must not terminate the benchmark before recoverySteps
+are exhausted.
+```
+
+This 40-step automatic recovery lifecycle is benchmark-only.
 
 Normal runtime does not automatically switch to CREATE_SPACE for 40 steps.
 
 ---
 
-## 5. CREATE_SPACE Recovery Evidence
+## 5. Corrected CREATE_SPACE Recovery Evidence
 
 Controlled seeds:
 
@@ -227,6 +243,15 @@ Controlled seeds:
 25 seeds
 ```
 
+Parameters:
+
+```text
+maxSteps: 2000
+recoverySteps: 40
+baseline policy: EAT_SAFE_FOOD
+recovery policy: CREATE_SPACE
+```
+
 Baseline termination counts:
 
 ```text
@@ -235,7 +260,7 @@ NO_MOVE:               6
 STAGNATION_DETECTED:   3
 ```
 
-Recovery termination counts:
+Corrected recovery termination counts:
 
 ```text
 MAX_STEPS:            19
@@ -243,7 +268,15 @@ NO_MOVE:               6
 STAGNATION_DETECTED:   0
 ```
 
-Only three baseline runs reached STAGNATION:
+Recovery trigger coverage:
+
+```text
+triggered:   3/25
+completed:   3/3 triggered
+not triggered: 22/25
+```
+
+Only these baseline runs reached STAGNATION and triggered recovery:
 
 ```text
 1001
@@ -251,7 +284,7 @@ Only three baseline runs reached STAGNATION:
 2009
 ```
 
-All three triggered and completed CREATE_SPACE recovery.
+All three completed the full recovery episode.
 
 ### Seed 1001
 
@@ -261,12 +294,12 @@ score 96
 steps 1736
 STAGNATION_DETECTED
 
-Recovery:
-score 104
+Corrected recovery:
+score 105
 steps 2000
 MAX_STEPS
 
-Δ score: +8
+Δ score: +9
 Δ steps: +264
 ```
 
@@ -278,7 +311,7 @@ score 88
 steps 1875
 STAGNATION_DETECTED
 
-Recovery:
+Corrected recovery:
 score 93
 steps 2000
 MAX_STEPS
@@ -295,25 +328,34 @@ score 64
 steps 1198
 STAGNATION_DETECTED
 
-Recovery:
-score 93
+Corrected recovery:
+score 95
 steps 2000
 MAX_STEPS
 
-Δ score: +29
+Δ score: +31
 Δ steps: +802
 ```
 
 Average improvement among actual recovery episodes:
 
 ```text
-+14 score
-+397 steps
+average Δ score:
++15.0
+
+average Δ steps:
++397
 ```
 
 The other 22 seeds did not trigger recovery.
 
-Their baseline and recovery outcomes were unchanged.
+Their baseline and recovery outcomes were identical.
+
+This is important control evidence:
+
+```text
+22/22 non-triggered runs were unchanged.
+```
 
 Interpretation:
 
@@ -325,13 +367,28 @@ CREATE_SPACE as short STAGNATION recovery:
 promising
 ```
 
-Evidence strength:
+Current evidence strength:
 
 ```text
 actual recovery episodes = 3
+
+triggered:
+3/3 completed
+3/3 improved
+
+non-triggered:
+22/22 identical to baseline
 ```
 
-Therefore this is promising evidence, not universal proof.
+Therefore:
+
+```text
+The recovery effect is repeatable in the three
+currently observed STAGNATION cases,
+but the sample of actual recovery episodes remains small.
+```
+
+Do not generalize this into proof that CREATE_SPACE solves all late-game failures.
 
 ---
 
@@ -359,6 +416,14 @@ death-before-trigger
 ```
 
 This remains a separate failure class.
+
+The corrected recovery benchmark preserves this distinction:
+
+```text
+Recovery improved STAGNATION cases.
+
+It did not change NO_MOVE cases that never triggered recovery.
+```
 
 ---
 
@@ -472,7 +537,7 @@ are mainly post-event diagnostics rather than early-warning triggers.
 
 ## 8. Reachable-Space Drop Telemetry
 
-Current local implementation adds:
+Current implementation adds:
 
 ```text
 maxLowMobilityReachableDrop
@@ -671,11 +736,16 @@ CREATE_SPACE whole-run
 
 CREATE_SPACE short STAGNATION recovery
 → promising
-→ 3/3 actual triggered episodes improved
-→ evidence still small
+→ corrected runtime:
+   3/25 triggered
+   3/3 completed
+   3/3 improved
+   22/22 non-triggered identical to baseline
+→ evidence still small because only 3 recovery episodes occurred
 
 NO_MOVE
 → unresolved failure class
+→ unaffected in current recovery benchmark when no STAGNATION trigger occurs
 
 LOW_MOBILITY streak alone
 → insufficiently specific for PRE_TRAP
@@ -687,3 +757,5 @@ reachable-space episode drop
 ```
 
 Do not judge future planner or trigger changes from one lucky high-score run.
+
+Prefer controlled seeded comparisons with explicit lifecycle semantics.

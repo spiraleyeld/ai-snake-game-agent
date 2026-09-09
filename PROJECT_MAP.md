@@ -1,9 +1,9 @@
 # PROJECT_MAP — Snake Game + Local Qwen Agent
 
 > Current architecture/state map for fast onboarding.
-> Reconciled through 2026-09-10 against latest pushed GitHub checkpoint plus current local build evidence.
-> Latest pushed architecture source checkpoint: `93da94a`.
-> Latest pushed documentation alignment checkpoint: `596f082`.
+> Reconciled through 2026-09-10 against pushed GitHub source plus current runtime evidence.
+> Latest pushed architecture source checkpoint: `6f0c8eb`.
+> Latest pushed documentation checkpoint: `4a1415e`.
 > Detailed benchmark evidence lives in `BENCHMARK_NOTES.md`.
 > OpenCode workflow / Git / context rules live in `AGENTS.md`.
 
@@ -1379,16 +1379,38 @@ Benchmark-only lifecycle:
 ```text
 fixed EAT_SAFE_FOOD
 → first STAGNATION
-→ CREATE_SPACE for recoverySteps
-→ fresh EAT_SAFE_FOOD
+→ assign fresh CREATE_SPACE ActiveStrategy
+→ reset progress / trigger state
+→ run CREATE_SPACE for recoverySteps
+→ ignore repeated STAGNATION termination while recovery is active
+→ assign fresh EAT_SAFE_FOOD
+→ reset progress / trigger state
 → continue
 ```
 
 Only one recovery episode.
 
-Qwen disabled for the whole run.
+Qwen is disabled for the whole run.
 
-This is not normal runtime semantics.
+Important implementation invariant:
+
+```text
+The recovery phase must change activeStrategy itself.
+
+A local phase label alone does not change the policy
+executed by runStep().
+```
+
+During active CREATE_SPACE recovery:
+
+```text
+STAGNATION_DETECTED does not prematurely terminate
+the benchmark before recoverySteps are exhausted.
+```
+
+This is benchmark-only behavior.
+
+Normal runtime does not automatically perform a fixed 40-step CREATE_SPACE recovery.
 
 ### runSafeBfsBenchmark(seed, maxSteps)
 
@@ -1410,7 +1432,11 @@ CREATE_SPACE whole-run
 
 CREATE_SPACE 40-step STAGNATION recovery
 → promising
-→ 3/3 actual triggered cases improved
+→ corrected runtime benchmark:
+   3/25 triggered
+   3/3 completed
+   3/3 improved
+   22/22 non-triggered cases identical to baseline
 → sample remains small
 
 NO_MOVE
@@ -1677,15 +1703,20 @@ not survival planning
 
 ```text
 implemented
-but poor as whole-run policy
-better supported as temporary recovery
+poor as whole-run policy
+promising as temporary STAGNATION recovery
 ```
 
 ### Recovery evidence
 
 ```text
+corrected runtime benchmark:
 3 actual STAGNATION recovery episodes
+3/3 completed
 3/3 improved
+
+22 non-triggered cases:
+identical to baseline
 
 promising
 but not broad proof
@@ -1846,6 +1877,9 @@ benchmark-specific lifecycle / harness
 
 but only after a focused coupling audit.
 
+The recent recovery benchmark bug confirms that benchmark lifecycle code
+is behaviorally meaningful and should not be treated as disposable test glue.
+
 Loop/stagnation trigger lifecycle is more coupled and should not be the first broad extraction target.
 
 ---
@@ -1913,8 +1947,10 @@ scores
 step counts
 recovery deltas
 death-window experiment results
-historical experimental comparisons
+experimental comparisons that remain relevant
 ```
+
+Invalidated benchmark conclusions should be replaced by corrected evidence rather than retained as active evidence.
 
 ### AGENTS.md
 
@@ -1970,7 +2006,7 @@ Renew when roughly:
 ```text
 2–4 meaningful architecture changes accumulate
 or
-a fresh session would be materially misled
+a fresh consumer would be materially misled
 or
 before an important architecture checkpoint/handoff
 ```
@@ -1999,10 +2035,10 @@ Local:
 D:\Projects\snake-game
 
 Latest pushed architecture source checkpoint:
-93da94a
+6f0c8eb
 
 Latest pushed documentation checkpoint:
-596f082
+4a1415e
 
 Frontend:
 Vanilla TypeScript + Vite + Canvas 2D
@@ -2039,8 +2075,19 @@ poor fit
 
 CREATE_SPACE STAGNATION recovery:
 promising
-3/3 actual triggered cases improved
+corrected benchmark semantics
+3/25 triggered
+3/3 completed
+3/3 improved
+22/22 non-triggered identical
 sample still small
+
+Recovery benchmark:
+first STAGNATION
+→ fresh CREATE_SPACE ActiveStrategy
+→ 40-step recovery
+→ repeated STAGNATION ignored during recovery
+→ fresh EAT_SAFE_FOOD
 
 DangerMonitor:
 src/agent/danger-monitor.ts
