@@ -1287,6 +1287,7 @@ export class AgentController {
         recoveryTriggered = true;
         phase = 'CREATE_SPACE';
         createSpaceStepsRemaining = recoverySteps;
+        this.activeStrategy = this.createDefaultStrategy('CREATE_SPACE');
         this.resetProgressTracking();
         this._lastTrigger = '-';
       }
@@ -1303,7 +1304,7 @@ export class AgentController {
         }
       }
 
-      if (this._lastTrigger === 'STAGNATION_DETECTED' && stagnationEncountered) {
+      if (this._lastTrigger === 'STAGNATION_DETECTED' && stagnationEncountered && phase !== 'CREATE_SPACE') {
         terminationReason = 'STAGNATION_DETECTED';
         break;
       }
