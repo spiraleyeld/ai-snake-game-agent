@@ -1,10 +1,12 @@
 # PROJECT_MAP — Snake Game + Local Qwen Agent
 
 > Current architecture/state map for fast onboarding.
-> Reconciled through 2026-09-10 against pushed GitHub source plus current runtime evidence.
-> Latest pushed architecture source checkpoint: `6f0c8eb`.
-> Latest pushed documentation checkpoint: `4a1415e`.
-> Detailed benchmark evidence lives in `BENCHMARK_NOTES.md`.
+> Reconciled through 2026-09-11 against current local source/runtime evidence.
+> Current local production source checkpoint: `72ed55c` — `Add Hamiltonian-safe strategy foundation`.
+> `72ed55c` has been committed locally; push to GitHub has NOT yet been verified.
+> Latest previously verified pushed architecture source checkpoint: `6f0c8eb`.
+> Latest previously verified pushed documentation checkpoint: `4a1415e`.
+> Detailed benchmark evidence belongs in `BENCHMARK_NOTES.md`.
 > OpenCode workflow / Git / context rules live in `AGENTS.md`.
 
 ---
@@ -13,7 +15,7 @@
 
 Technical truth order:
 
-```text
+~~~text
 CURRENT LOCAL RUNTIME EVIDENCE
 > CURRENT LOCAL SOURCE
 > local git diff / git status
@@ -22,25 +24,47 @@ CURRENT LOCAL RUNTIME EVIDENCE
 > AGENTS.md
 > current handoff / conversation evidence
 > old assumptions
-```
+~~~
 
 Rules:
 
-```text
+~~~text
 Source wins over PROJECT_MAP.
-Local source/runtime wins over GitHub when they differ.
-GitHub absence does not prove local-file absence.
-AGENTS.md governs OpenCode workflow discipline.
-PROJECT_MAP.md describes architecture/state.
-```
 
-Do not infer active runtime ownership from legacy duplicate files.
+Local source/runtime wins over GitHub
+when they differ.
+
+GitHub absence does not prove
+local/untracked absence.
+
+AGENTS.md governs OpenCode workflow discipline.
+
+PROJECT_MAP.md describes current architecture/state.
+~~~
+
+Current checkpoint caution:
+
+~~~text
+Local production source checkpoint:
+72ed55c
+
+Push status:
+NOT YET VERIFIED
+
+PROJECT_MAP.md:
+currently being renewed after 72ed55c
+
+Untracked research artifacts may still exist locally.
+Their existence does NOT make them active runtime source.
+~~~
+
+Do not infer active ownership from legacy or untracked duplicate files.
 
 ---
 
 ## 1. Current Stack / Runtime
 
-```text
+~~~text
 Project:
 D:\Projects\snake-game
 
@@ -65,32 +89,40 @@ Grid:
 Board:
 32×12
 384 cells
-```
+~~~
 
 Current physical geometry:
 
-```text
+~~~text
 cols = 32
 rows = 12
-```
+~~~
 
-Current AgentController board constants:
+AgentController board constants:
 
-```text
+~~~text
 COLS = 32
 ROWS = 12
-```
+~~~
 
-Important architecture debt:
+Hamiltonian helper is intentionally fixed to:
 
-```text
+~~~text
+32×12
+384 cells
+~~~
+
+Architecture debt:
+
+~~~text
 GameEngine derives board geometry from canvas/grid.
+
 AgentController still owns explicit COLS/ROWS constants.
-```
 
-These are not yet derived from one shared source of truth.
+Hamiltonian cycle helper also owns fixed 32×12 geometry.
+~~~
 
-Any future board-size change must verify both sides.
+Any future board-size change must verify all three.
 
 ---
 
@@ -98,28 +130,73 @@ Any future board-size change must verify both sides.
 
 Primary runtime object graph:
 
-```text
+~~~text
 src/main.ts
-├─ GameEngine              → src/game/engine.ts
-├─ Renderer                → src/game/renderer.ts
-├─ InputHandler            → src/game/input.ts
-├─ AgentController         → src/agent/agent-controller.ts
-│  ├─ LmStudioClient         → src/agent/lm-studio-client.ts
-│  ├─ SafetyLayer            → src/agent/safety-layer.ts
-│  ├─ StrategyExecutor       → src/agent/strategy-executor.ts
-│  ├─ AgentMemory            → src/agent/agent-memory.ts
-│  ├─ PathPlanner            → src/agent/path-planner.ts
-│  ├─ SnakeSimulator         → src/agent/snake-simulator.ts
-│  ├─ SafeFoodValidator      → src/agent/safe-food-validator.ts
-│  ├─ DangerMonitor          → src/agent/danger-monitor.ts
-│  ├─ DangerEpisodeTracker   → src/agent/danger-episode-tracker.ts
-│  └─ StagnationBudget       → src/agent/stagnation-budget.ts
-└─ AgentPanel              → src/agent-panel.ts
-```
+├─ GameEngine
+│  → src/game/engine.ts
+│
+├─ Renderer
+│  → src/game/renderer.ts
+│
+├─ InputHandler
+│  → src/game/input.ts
+│
+├─ AgentController
+│  → src/agent/agent-controller.ts
+│
+│  ├─ LmStudioClient
+│  │  → src/agent/lm-studio-client.ts
+│  │
+│  ├─ SafetyLayer
+│  │  → src/agent/safety-layer.ts
+│  │
+│  ├─ StrategyExecutor
+│  │  → src/agent/strategy-executor.ts
+│  │  └─ HamiltonianCycle32x12
+│  │     → src/agent/hamiltonian-cycle-32x12.ts
+│  │
+│  ├─ AgentMemory
+│  │  → src/agent/agent-memory.ts
+│  │
+│  ├─ PathPlanner
+│  │  → src/agent/path-planner.ts
+│  │
+│  ├─ SnakeSimulator
+│  │  → src/agent/snake-simulator.ts
+│  │
+│  ├─ SafeFoodValidator
+│  │  → src/agent/safe-food-validator.ts
+│  │
+│  ├─ DangerMonitor
+│  │  → src/agent/danger-monitor.ts
+│  │
+│  ├─ DangerEpisodeTracker
+│  │  → src/agent/danger-episode-tracker.ts
+│  │
+│  └─ StagnationBudget
+│     → src/agent/stagnation-budget.ts
+│
+└─ AgentPanel
+   → src/agent-panel.ts
+~~~
+
+Important ownership distinction:
+
+~~~text
+hamiltonian-cycle-32x12.ts
+= active production source
+= deterministic helper used by StrategyExecutor
+
+bench-hamiltonian-prep.ts
+= possible untracked historical research artifact
+= NOT imported by active production runtime
+= NOT a StrategyPolicy
+= NOT part of checkpoint 72ed55c
+~~~
 
 ### Active UI
 
-```text
+~~~text
 Implementation:
 src/agent-panel.ts
 
@@ -128,37 +205,37 @@ src/style.css
 
 Bootstrap/import:
 src/main.ts
-```
+~~~
 
 Desktop layout:
 
-```text
+~~~text
 Thinking | Snake | Control
    2     |   6   |    2
-```
+~~~
 
 Current game frame:
 
-```text
+~~~text
 logical canvas = 640×240
 aspect ratio = 8:3
 middle-column width retained
 game frame vertically centered
 side panels remain full-height
-```
+~~~
 
-### Known local legacy / duplicate risk
+### Known legacy / duplicate risk
 
-Known local untracked duplicate/legacy paths include:
+Known local legacy/duplicate paths have included:
 
-```text
+~~~text
 src/agent/AgentPanel.jsx
 src/agent/AgentPanel.css
 src/agent/LMStudioClient.ts
 src/agent/promptBuilder.ts
-```
+~~~
 
-Do not treat these as active unless the current local import graph proves otherwise.
+Do not treat these as active unless current imports prove otherwise.
 
 Do not adopt, delete, stage, or modify them as a side effect of unrelated work.
 
@@ -168,7 +245,7 @@ Do not adopt, delete, stage, or modify them as a side effect of unrelated work.
 
 Core separation:
 
-```text
+~~~text
 Qwen
 = slow high-level strategy / exception reasoning
 
@@ -180,78 +257,148 @@ SafetyLayer
 
 GameEngine
 = physical state transition
-```
+~~~
 
 Primary control model:
 
-```text
+~~~text
 Qwen
 → ActiveStrategy
 → local deterministic planner/executor
 → SafetyLayer
 → GameEngine
-```
+~~~
 
-Do not regress Qwen into the normal per-tick primitive direction controller.
+Do not regress Qwen into normal per-tick primitive direction control.
 
 Qwen decides:
 
-```text
+~~~text
 what objective / strategy should matter now
-```
+~~~
 
 Local TypeScript decides:
 
-```text
-how to execute that strategy each tick
-```
+~~~text
+how to execute that objective each tick
+~~~
+
+SafetyLayer decides:
+
+~~~text
+whether an immediate proposed move is legal
+~~~
+
+GameEngine decides:
+
+~~~text
+what physically happens after a move
+~~~
 
 ---
 
-## 4. GameEngine Semantics
+## 4. Target Architecture
+
+Current design target:
+
+~~~text
+Game State
+    ↓
+Situation / Context
+    ↓
+Qwen high-level decision
+    ↓
+Strategy selection
+    ↓
+Deterministic TypeScript navigation
+    ↓
+SafetyLayer
+    ↓
+GameEngine
+~~~
+
+Desired high-level strategy family:
+
+~~~text
+EAT_SAFE_FOOD
+SAFE_CHASE
+CREATE_SPACE
+HAMILTONIAN_SAFE
+future structural recovery / preparation capability
+~~~
+
+Important:
+
+~~~text
+Not every target capability is currently production-integrated.
+~~~
+
+Current Hamiltonian status:
+
+~~~text
+HAMILTONIAN_SAFE executor support:
+IMPLEMENTED
+
+Automatic runtime switching into HAMILTONIAN_SAFE:
+NOT IMPLEMENTED
+
+Reliable Hamiltonian recovery / preparation:
+NOT IMPLEMENTED
+
+Qwen production selection of HAMILTONIAN_SAFE:
+NOT IMPLEMENTED
+~~~
+
+Qwen should eventually choose among reliable high-level deterministic capabilities.
+
+Qwen should not compensate for missing deterministic capabilities by issuing normal per-tick primitive moves.
+
+---
+
+## 5. GameEngine Semantics
 
 Source:
 
-```text
+~~~text
 src/game/engine.ts
-```
+~~~
 
 Directions:
 
-```text
+~~~text
 Up
 Down
 Left
 Right
-```
+~~~
 
 Game states:
 
-```text
+~~~text
 Start
 Playing
 Paused
 GameOver
-```
+~~~
 
 Fresh `start()`:
 
-```text
+~~~text
 3-segment snake near center
 initial direction = Right
 score = 0
 speed = 150 ms
 seeded RNG state resets when seed != null
 spawnFood()
-```
+~~~
 
 Logical tick:
 
-```text
+~~~text
 apply queued direction
 → compute new head
 → wall collision check
-→ current full-body collision check
+→ collision check against CURRENT FULL snake body
 → add new head
 → if food:
      score++
@@ -259,50 +406,53 @@ apply queued direction
      spawn food
   else:
      remove tail
-```
+~~~
 
-Important collision rule:
+Critical collision rule:
 
-```text
+~~~text
 Current tail is still occupied during collision checking.
+
 Tail removal happens only after the new head is accepted.
-```
+
+Moving into the current tail cell therefore collides.
+~~~
 
 Agent movement normally uses manual mode:
 
-```text
+~~~text
 engine.setManualMode(true)
 engine.setDirection(direction)
 engine.step()
-```
+~~~
 
 When manual mode is enabled:
 
-```text
+~~~text
 normal animation-loop engine.tick()
 does not move the snake
-```
+~~~
 
 ---
 
-## 5. Deterministic Food RNG
+## 6. Deterministic Food RNG
 
 GameEngine implements seeded food RNG.
 
 Relevant state/API:
 
-```text
+~~~text
 _seed
 _rngState
 setSeed(seed | null)
 getSeed()
 random()
 spawnFood()
-```
+~~~
 
 Behavior:
 
-```text
+~~~text
 seed === null
 → Math.random()
 
@@ -311,140 +461,158 @@ seed !== null
 
 start()
 → resets RNG state from seed
-```
+~~~
 
 Debug use:
 
-```js
+~~~javascript
 window.__snakeDebug.setSeed(1001)
 window.__snakeDebug.restart()
-```
+~~~
 
 `setSeed(null)` restores non-deterministic food spawning.
 
 Important:
 
-```text
+~~~text
 Same seed is reproducible only under the same board geometry
-and execution path.
-```
+and the same execution path.
 
-Different policies may alter occupied cells and therefore alter food-candidate rejection behavior.
+Different policies change occupied cells and therefore
+can change later food placement behavior.
+~~~
 
 ---
 
-## 6. Active Strategies
+## 7. Strategy Policy State
 
-Current policy type:
+Type source:
 
-```ts
-export type StrategyPolicy =
-  | 'SAFE_CHASE'
-  | 'EAT_SAFE_FOOD'
-  | 'CREATE_SPACE';
-```
+~~~text
+src/agent/types.ts
+~~~
 
-Current implemented policies:
+Current type-level StrategyPolicy:
 
-```text
+~~~text
+SAFE_CHASE
+EAT_SAFE_FOOD
+CREATE_SPACE
+HAMILTONIAN_SAFE
+~~~
+
+Production controller/Qwen lifecycle remains narrower.
+
+Normal controller strategy creation / Qwen optimization currently centers on:
+
+~~~text
 EAT_SAFE_FOOD
 SAFE_CHASE
 CREATE_SPACE
-```
+~~~
 
-Default:
+`HAMILTONIAN_SAFE` currently has:
 
-```text
+~~~text
+type support:
+YES
+
+executor support:
+YES
+
+automatic runtime selection:
+NO
+
+normal Qwen strategy selection:
+NO
+~~~
+
+Default normal policy:
+
+~~~text
 EAT_SAFE_FOOD
-```
-
-`createDefaultStrategy(policy?)` accepts an optional implemented policy.
-
-Without an argument:
-
-```text
-EAT_SAFE_FOOD
-```
+~~~
 
 ActiveStrategy contains:
 
-```text
+~~~text
 policy
 params
 startedAtStep
-```
+~~~
 
-Current strategy params:
+Current generic strategy params:
 
-```text
+~~~text
 foodWeight
 openSpaceWeight
 wallPenalty
 bodyPenalty
 recentVisitPenalty
-```
+~~~
 
 Default params:
 
-```text
+~~~text
 foodWeight          1.0
 openSpaceWeight     0.4
 wallPenalty         0.3
 bodyPenalty         0.8
 recentVisitPenalty  0.0
-```
+~~~
 
-Not implemented:
+Still not implemented as production policies:
 
-```text
+~~~text
 FOLLOW_TAIL
 ESCAPE
-SAFE_CYCLE / HAMILTONIAN
-```
+HAMILTONIAN_PREP
+general multi-step structural recovery
+~~~
 
 ---
 
-## 7. EAT_SAFE_FOOD
+## 8. EAT_SAFE_FOOD
 
-Primary local planner path:
+Primary local food planner:
 
-```text
+~~~text
 evaluateFoodPath()
-```
+~~~
 
 Supporting modules:
 
-```text
+~~~text
 src/agent/path-planner.ts
 src/agent/snake-simulator.ts
 src/agent/safe-food-validator.ts
-```
+~~~
 
 Flow:
 
-```text
+~~~text
 1. BFS head → food
 2. simulate complete candidate path
 3. verify food is actually eaten
 4. verify post-food head → tail reachability heuristic
-```
+~~~
 
 Possible reasons:
 
-```text
+~~~text
 SAFE
 NO_FOOD
 NO_FOOD_PATH
 SIMULATION_INVALID
 FOOD_NOT_REACHED
 NO_TAIL_ESCAPE
-```
+~~~
 
 When safe:
 
-```text
+~~~text
 execute path[0]
-```
+~~~
 
 The entire route is not blindly committed.
 
@@ -452,142 +620,453 @@ The policy replans every tick.
 
 If no confirmed safe food path exists:
 
-```text
+~~~text
 fallback to StrategyExecutor weighted local behavior
 for that tick
-```
+~~~
 
 Important:
 
-```text
+~~~text
 post-food head→tail reachability
 is a heuristic
+
 not a proof of long-term survival
-```
+~~~
 
 ---
 
-## 8. SAFE_CHASE / CREATE_SPACE
+## 9. SAFE_CHASE
 
 Source:
 
-```text
+~~~text
 src/agent/strategy-executor.ts
-```
+~~~
 
-### SAFE_CHASE
-
-SAFE_CHASE is a deterministic weighted one-step Greedy policy.
+SAFE_CHASE is deterministic weighted one-step Greedy.
 
 Candidate scoring includes:
 
-```text
+~~~text
 food progress
 + body-aware open-space score
 - wall risk
 - body proximity risk
 - recent-visit penalty
-```
+~~~
 
 Existing `countOpenSpace()`:
 
-```text
+~~~text
 body-aware flood fill
 cap = 200
-```
+~~~
 
-Current board:
+Board:
 
-```text
+~~~text
 384 cells
-```
+~~~
 
-Therefore large reachable areas can plateau at 200.
+Therefore:
+
+~~~text
+large reachable regions may plateau at 200
+~~~
 
 SAFE_CHASE is not:
 
-```text
+~~~text
 multi-step survival planning
-committed detour planning
 tail-following
 escape planning
-```
+Hamiltonian recovery
+~~~
 
-### CREATE_SPACE
+---
 
-CREATE_SPACE is semantically distinct.
+## 10. CREATE_SPACE
+
+Source:
+
+~~~text
+src/agent/strategy-executor.ts
+~~~
+
+CREATE_SPACE is semantically distinct from SAFE_CHASE.
 
 Primary objective:
 
-```text
+~~~text
 maximize exact uncapped body-aware reachable space
-```
+~~~
 
 Secondary tie-break:
 
-```text
+~~~text
 better food progress
-```
+~~~
 
 Final tie:
 
-```text
-preserve deterministic existing tie behavior
-```
+~~~text
+deterministic existing tie behavior
+~~~
 
 Flow:
 
-```text
+~~~text
 legal candidates
 → exact uncapped reachable-space count
 → choose largest space
-→ if equal, prefer better food progress
-→ deterministic final tie behavior
-```
+→ if equal, prefer food progress
+→ deterministic final tie
+~~~
 
-CREATE_SPACE intentionally does not reuse the capped SAFE_CHASE open-space metric as its primary objective.
+CREATE_SPACE intentionally does not reuse SAFE_CHASE's capped open-space score as its primary objective.
 
-Example:
+Current evidence:
 
-```text
-210 reachable cells
-vs
-350 reachable cells
-```
-
-must remain distinguishable.
-
-Current benchmark conclusion:
-
-```text
+~~~text
 CREATE_SPACE whole-run:
 poor fit
 
 CREATE_SPACE as temporary STAGNATION recovery:
-promising
-```
+promising in a small corrected sample
+~~~
 
-Detailed evidence:
+Detailed benchmark evidence belongs in:
 
-```text
+~~~text
 BENCHMARK_NOTES.md
-```
+~~~
 
 ---
 
-## 9. Path Planner / Simulator / Safe Food
+## 11. Hamiltonian Production Checkpoint
 
-### PathPlanner
+Current local production source checkpoint:
+
+~~~text
+72ed55c
+Add Hamiltonian-safe strategy foundation
+~~~
+
+Committed files:
+
+~~~text
+src/agent/hamiltonian-cycle-32x12.ts
+src/agent/strategy-executor.ts
+src/agent/types.ts
+~~~
+
+Commit scope:
+
+~~~text
+3 files changed
+127 insertions
+1 deletion
+~~~
+
+Build before checkpoint:
+
+~~~text
+npm run build
+PASS
+~~~
+
+Current push status:
+
+~~~text
+NOT YET VERIFIED
+~~~
+
+Do not describe `72ed55c` as pushed until latest GitHub main is checked.
+
+---
+
+## 12. Hamiltonian Cycle Helper
 
 Source:
 
-```text
+~~~text
+src/agent/hamiltonian-cycle-32x12.ts
+~~~
+
+Purpose:
+
+~~~text
+fixed directed Hamiltonian cycle
+for the current 32×12 / 384-cell board
+~~~
+
+Exports include:
+
+~~~text
+COLS
+ROWS
+CYCLE_LENGTH
+
+getCellCycleIndex(x, y)
+getCellFromCycleIndex(cycleIndex)
+getNextCellFromCycle(cycleIndex)
+getNextDirection(x, y)
+~~~
+
+Current topology:
+
+~~~text
+start:
+(0,0)
+
+serpentine rows:
+x = 1..31
+
+return path:
+column x = 0
+from bottom back upward
+~~~
+
+Critical corrected mapping:
+
+~~~text
+(0,11) → 373
+...
+(0,1)  → 383
+~~~
+
+Inverse mapping:
+
+~~~text
+373 → (0,11)
+383 → (0,1)
+~~~
+
+Closure:
+
+~~~text
+index 383 = (0,1)
+→ index 0 = (0,0)
+~~~
+
+These cells are Manhattan-adjacent.
+
+Previous x=0 forward/inverse mapping inconsistency was repaired before checkpoint.
+
+Validation evidence collected during repair:
+
+~~~text
+MAPPING:
+PASS
+
+TOPOLOGY:
+PASS
+
+CLOSED:
+PASS
+
+BUILD:
+PASS
+~~~
+
+The helper is deterministic and board-state independent.
+
+It does not itself decide:
+
+~~~text
+when to enter Hamiltonian mode
+whether the snake is currently compatible
+how to recover compatibility
+how future food growth should be handled
+~~~
+
+---
+
+## 13. HAMILTONIAN_SAFE Executor
+
+Source:
+
+~~~text
+src/agent/strategy-executor.ts
+~~~
+
+Current branch:
+
+~~~text
+strategy.policy === HAMILTONIAN_SAFE
+~~~
+
+The executor computes current Hamiltonian body-order slack.
+
+For each body segment `j`:
+
+~~~text
+d_j =
+  (segCycleIndex
+   - headCycleIndex
+   + CYCLE_LENGTH)
+  % CYCLE_LENGTH
+
+slack_j =
+  d_j - (snake.length - j)
+~~~
+
+Current minimum:
+
+~~~text
+minSlack =
+minimum slack_j over body segments
+~~~
+
+Current executor contract:
+
+~~~text
+IF:
+minSlack >= 0
+
+AND:
+cycle direction is in current legal moves
+
+THEN:
+return cycleDir
+
+ELSE:
+return null
+~~~
+
+Equivalent code semantics:
+
+~~~text
+if (minSlack >= 0 && legal.includes(cycleDir))
+    return cycleDir
+
+return null
+~~~
+
+Important:
+
+~~~text
+HAMILTONIAN_SAFE does NOT fall back to legal[0].
+~~~
+
+This prevents failed Hamiltonian admission from silently continuing under arbitrary legal movement while still claiming Hamiltonian-safe execution.
+
+---
+
+## 14. Hamiltonian Admission Meaning
+
+Current executor admission condition:
+
+~~~text
+currentMinSlack >= 0
+AND
+cycleDir is immediately legal
+~~~
+
+This is:
+
+~~~text
+a deterministic current-state executor guard
+~~~
+
+It must not be described as:
+
+~~~text
+a complete mathematical proof
+of indefinite future safety under all food/growth sequences
+~~~
+
+Immediate cycle-step legality matters because GameEngine checks collision against the current full body before tail removal.
+
+---
+
+## 15. Hamiltonian Failure Lifecycle
+
+When `HAMILTONIAN_SAFE` is active and executor admission fails:
+
+~~~text
+StrategyExecutor
+→ returns null
+~~~
+
+Normal non-fixed runtime:
+
+~~~text
+candidate == null
+→ strategy lifecycle exits current ActiveStrategy
+→ existing replan / Qwen / fallback path continues
+~~~
+
+Fixed-policy paths differ:
+
+~~~text
+candidate == null
+→ pickSafeDirection() may provide local fallback
+→ fixed policy identity may remain active
+~~~
+
+Therefore:
+
+~~~text
+normal runtime semantics
+≠
+fixed-policy benchmark semantics
+~~~
+
+Do not infer production behavior from fixed-policy fallback behavior.
+
+---
+
+## 16. Missing Hamiltonian Orchestration
+
+Current source HAS:
+
+~~~text
+fixed 32×12 Hamiltonian helper
+HAMILTONIAN_SAFE StrategyPolicy type
+HAMILTONIAN_SAFE deterministic executor
+current-state admission guard
+~~~
+
+Current source DOES NOT HAVE:
+
+~~~text
+automatic Hamiltonian switching
+Qwen selection of HAMILTONIAN_SAFE
+AgentController Hamiltonian admission trigger
+Hamiltonian benchmark admission telemetry
+Hamiltonian PREP runtime hook
+Hamiltonian recovery state machine
+multi-step Hamiltonian structural reorganization
+~~~
+
+Current status:
+
+~~~text
+Hamiltonian executor capability:
+IMPLEMENTED
+
+Hamiltonian production orchestration:
+NOT IMPLEMENTED
+
+Hamiltonian compatibility recovery:
+NOT SOLVED
+~~~
+
+---
+
+## 17. PathPlanner
+
+Source:
+
+~~~text
 src/agent/path-planner.ts
-```
+~~~
 
 API:
 
-```text
+~~~text
 findPath(
   start,
   target,
@@ -597,12 +1076,13 @@ findPath(
   currentDirection?
 )
 → Direction[] | null
-```
+~~~
 
 Characteristics:
 
-```text
+~~~text
 pure deterministic BFS
+
 direction order:
 Up, Down, Left, Right
 
@@ -610,20 +1090,23 @@ prevents immediate 180° reversal
 when currentDirection is supplied
 
 respects board bounds
-does not mutate GameEngine
-```
 
-### SnakeSimulator
+does not mutate GameEngine
+~~~
+
+---
+
+## 18. SnakeSimulator
 
 Source:
 
-```text
+~~~text
 src/agent/snake-simulator.ts
-```
+~~~
 
 `simulatePath()` follows engine-like semantics:
 
-```text
+~~~text
 opposite direction request
 → ignored / current direction executes
 
@@ -637,236 +1120,102 @@ food consumption
 → growth / no tail pop
 
 no RNG
-no GameEngine mutation
-```
 
-### SafeFoodValidator
+no GameEngine mutation
+~~~
+
+The simulator is reusable deterministic infrastructure.
+
+Historical Hamiltonian PREP research reused it, but current production runtime does not import that PREP prototype.
+
+---
+
+## 19. SafeFoodValidator
 
 Source:
 
-```text
+~~~text
 src/agent/safe-food-validator.ts
-```
+~~~
+
+Safe-food validation uses deterministic local evidence.
 
 Post-food heuristic temporarily removes the current tail cell from blockers before head→tail BFS.
 
-This is intentionally only a survival heuristic.
+Important:
+
+~~~text
+safe-food validation
+= useful survival heuristic
+
+not:
+formal long-term survival proof
+~~~
 
 ---
 
-## 10. SafetyLayer
+## 20. SafetyLayer
 
 Source:
 
-```text
+~~~text
 src/agent/safety-layer.ts
-```
+~~~
 
 Immediate checks include:
 
-```text
+~~~text
 180° reversal
 wall collision
 current body collision
-```
+~~~
 
-Normal local-strategy path:
+Normal local strategy path:
 
-```text
-candidate
+~~~text
+StrategyExecutor candidate
 → validateDirection()
-→ requested direction if legal
-→ otherwise SafetyLayer fallback when available
-```
+→ execute if accepted
+~~~
 
-Normal runtime behavior may invalidate a strategy after a SafetyLayer override.
+`getLegalMoves()` is also used by deterministic local logic.
 
-Fixed-policy benchmark exception:
+Important wording:
 
-```text
-SafetyLayer may override immediate direction
-but fixed policy identity remains active
-```
+~~~text
+getLegalMoves()
+= immediate legal-move evidence
 
-Therefore:
+validateDirection()
+= normal runtime SafetyLayer validation
+~~~
 
-```text
-fixed policy ≠ fixed direction
-```
+Do not equate every `getLegalMoves()` call with a complete SafetyLayer lifecycle.
 
-`pickSafeDirection()` also exists as a local fallback path.
-
-Its open-space heuristic is separate from:
-
-```text
-SAFE_CHASE countOpenSpace()
-CREATE_SPACE exact uncapped reachable-space ordering
-```
+`pickSafeDirection()` remains available as a local fallback.
 
 ---
 
-## 11. LOOP / Progress / Stagnation
-
-### LOOP
-
-Controller tracks rich strategy-state signatures including:
-
-```text
-head
-direction
-food
-score
-full ordered snake body
-recent head history
-all five strategy params
-```
-
-On normal LOOP detection:
-
-```text
-_lastTrigger = LOOP_DETECTED
-preserve failedStrategy
-capture trigger snapshot
-activeStrategy = null
-→ later optimizeStrategy()
-```
-
-In explicit fixed-policy benchmark mode:
-
-```text
-_lastTrigger = LOOP_DETECTED
-activeStrategy remains intact
-Qwen remains disabled
-```
-
-The benchmark may still terminate on LOOP.
-
-### Progress tracking
-
-Current progress evidence includes:
-
-```text
-progressFoodTarget
-bestFoodDistance
-stepsSinceProgress
-_effectiveStagnationThreshold
-_stagnationCategory
-```
-
-Progress is currently based on Manhattan distance to food.
-
-Progress resets when:
-
-```text
-food eaten
-new food appears
-current distance improves beyond previous best
-```
-
-Base threshold:
-
-```text
-80
-```
-
-### StagnationMode
-
-```ts
-'FIXED' | 'DYNAMIC'
-```
-
-Normal runtime:
-
-```text
-DYNAMIC
-```
-
-Benchmark paths:
-
-```text
-FIXED
-```
-
-FIXED:
-
-```text
-stepsSinceProgress >= 80
-→ STAGNATION_DETECTED
-```
-
-Dynamic budget categories:
-
-```text
-NORMAL        → 80
-REORGANIZING  → clamp(round(reachableCells × 0.25), 80, 200)
-PRESSURED     → 40
-EMERGENCY     → 0
-```
-
-Current controller semantics are intentionally narrower:
-
-```text
-Only REORGANIZING may extend an already-reached boundary above 80.
-```
-
-Therefore:
-
-```text
-PRESSURED = 40
-does NOT create an early 40-step runtime trigger
-
-EMERGENCY = 0
-does NOT create direct Qwen triggering
-
-Danger
-does NOT bypass the current stagnation boundary
-```
-
-Normal STAGNATION:
-
-```text
-_lastTrigger = STAGNATION_DETECTED
-preserve failedStrategy
-capture trigger snapshot
-activeStrategy = null
-reset progress/loop tracking
-→ optimizeStrategy()
-```
-
-Explicit fixed-policy benchmark:
-
-```text
-STAGNATION may be recorded/terminate benchmark
-but policy identity remains intact
-and Qwen is disabled
-```
-
----
-
-## 12. DangerMonitor / DangerEpisodeTracker
-
-### DangerMonitor
+## 21. DangerMonitor
 
 Source:
 
-```text
+~~~text
 src/agent/danger-monitor.ts
-```
+~~~
 
-`assessDanger()` is pure single-tick deterministic logic.
+Current outputs:
 
-Outputs:
-
-```text
+~~~text
 legalMoveCount
 survivableMoveCount
 reachableCells
 dangerLevel
-```
+~~~
 
 Danger levels:
 
-```text
+~~~text
 SAFE
 → survivableMoveCount >= 2
 
@@ -875,410 +1224,347 @@ LOW_MOBILITY
 
 DEAD_END_IMMINENT
 → survivableMoveCount == 0
-```
+~~~
 
-`reachableCells` uses body-aware flood fill from the current head.
+`reachableCells`:
 
-DangerMonitor owns no cross-tick state.
+~~~text
+body-aware flood fill from current head
+~~~
 
-### DangerEpisodeTracker
+Current production source DOES NOT expose:
+
+~~~text
+perimeterReachable
+escapeAfterOneMove
+~~~
+
+Those belonged to later research instrumentation and were removed before the clean production checkpoint.
+
+DangerMonitor remains deterministic current-state analysis.
+
+---
+
+## 22. DangerEpisodeTracker
 
 Source:
 
-```text
+~~~text
 src/agent/danger-episode-tracker.ts
-```
+~~~
 
-Current architecture:
+Ownership:
 
-```text
+~~~text
 DangerMonitor
 → current-tick assessment
 
 DangerEpisodeTracker
-→ cross-tick Danger episode state
+→ cross-tick Danger episode history
 
 AgentController
-→ orchestration / consumption
-```
+→ orchestration / UI / benchmark consumption
+~~~
 
-Current API:
+Current state includes:
 
-```text
-processTick(dangerLevel, reachableCells)
-getState()
-reset()
-```
-
-Tracked state includes:
-
-```text
+~~~text
 previousDangerLevel
+
 currentLowMobilityStreak
 maxLowMobilityStreak
+
 lastLowStreakBeforeDeadEnd
 deadEndEventCount
+
 maxLowMobilityReachableDrop
 lastLowMobilityReachableDropBeforeDeadEnd
-```
+~~~
 
-### LOW_MOBILITY episode semantics
+Current source DOES NOT contain later research-only per-tick drop fields such as:
 
-```text
-LOW_MOBILITY
-→ current streak++
-→ update max streak
+~~~text
+maxLegalMoveDrop
+maxSurvivableMoveDrop
+maxReachableCellDrop
+maxReachableCellDropFreeCellsBefore
+~~~
 
-SAFE
-→ current streak = 0
-
-first transition into DEAD_END_IMMINENT
-→ capture previous LOW streak
-→ deadEndEventCount++
-→ current streak = 0
-
-repeated DEAD_END ticks
-→ do not increment event count again
-```
-
-### Reachable-space episode-drop telemetry
-
-At LOW_MOBILITY episode start:
-
-```text
-capture reachableCells baseline
-```
-
-During the same episode:
-
-```text
-track maximum drop relative to that episode start
-```
-
-Exposed metrics:
-
-```text
-maxLowMobilityReachableDrop
-lastLowMobilityReachableDropBeforeDeadEnd
-```
-
-Do not use accumulated negative deltas.
-
-Example:
-
-```text
-100 → 80 → 100 → 80
-```
-
-must not become:
-
-```text
-40 total deterioration
-```
-
-The metric is episode-relative.
-
-Current evidence status:
-
-```text
-implementation:
-PASS
-
-build:
-PASS
-
-runtime benchmark evidence for reachable-drop fields:
-PENDING
-```
-
-### Trigger semantics
-
-Danger remains observational.
-
-None of these currently directly trigger Qwen:
-
-```text
-LOW_MOBILITY
-DEAD_END_IMMINENT
-reachable-space drop
-deadEndEventCount
-LOW_MOBILITY streak
-```
-
-Current Qwen high-level triggers remain:
-
-```text
-LOOP_DETECTED
-STAGNATION_DETECTED
-```
+Danger episode tracking remains observational.
 
 ---
 
-## 13. Current Trigger Research
+## 23. Danger and Qwen
 
-A real normal-runtime death was observed with:
+Danger does not directly trigger Qwen.
 
-```text
-Strategy = EAT_SAFE_FOOD
-Score = 103
-Steps = 2246
-Last Trigger = -
-Live Stag = 18 / 80
-LLM Calls = 0
-Danger = DEAD_END_IMMINENT
-Reachable = 1
-GAME-OVER
-```
+Current architecture:
 
-This proves:
+~~~text
+Danger telemetry
+→ UI / stagnation-budget context / telemetry
+~~~
 
-```text
-Some deaths occur before LOOP/STAGNATION
-has time to summon Qwen.
-```
+It does not currently perform:
 
-It does NOT prove:
+~~~text
+if danger == X
+→ call Qwen immediately
+~~~
 
-```text
-DEAD_END_IMMINENT → Qwen
-```
+Current normal Qwen triggers remain primarily:
 
-should be implemented.
+~~~text
+LOOP_DETECTED
+STAGNATION_DETECTED
+~~~
 
-At DEAD_END_IMMINENT, recovery may already be too late.
+Do not invent a direct Danger→Qwen trigger.
 
-### LOW_MOBILITY evidence
+---
 
-Controlled evidence shows:
+## 24. LOOP / Progress / Stagnation
 
-```text
-NO_MOVE runs may have long LOW_MOBILITY streaks
-but MAX_STEPS controls may also have equally long or longer streaks
-```
+Controller tracks strategy state history.
+
+Known trigger signals:
+
+~~~text
+LOOP_DETECTED
+STAGNATION_DETECTED
+~~~
+
+Progress state:
+
+~~~text
+progressFoodTarget
+bestFoodDistance
+stepsSinceProgress
+_effectiveStagnationThreshold
+_stagnationCategory
+~~~
+
+Progress currently uses Manhattan distance to food.
+
+Resets when:
+
+~~~text
+food eaten
+new food appears
+current food distance improves beyond previous best
+~~~
+
+Base stagnation threshold:
+
+~~~text
+80
+~~~
+
+### StagnationMode
+
+~~~typescript
+'FIXED' | 'DYNAMIC'
+~~~
+
+Normal runtime:
+
+~~~text
+DYNAMIC
+~~~
+
+Benchmark paths:
+
+~~~text
+FIXED
+~~~
+
+FIXED behavior:
+
+~~~text
+stepsSinceProgress >= 80
+→ STAGNATION_DETECTED
+~~~
+
+Dynamic budget input can include:
+
+~~~text
+DangerLevel
+survivableMoveCount
+reachableCells
+safe-food evidence
+~~~
+
+via:
+
+~~~text
+src/agent/stagnation-budget.ts
+~~~
+
+Known categories:
+
+~~~text
+NORMAL
+REORGANIZING
+PRESSURED
+EMERGENCY
+~~~
+
+Current controller semantics:
+
+~~~text
+REORGANIZING may extend
+an already-reached stagnation boundary.
+
+PRESSURED / EMERGENCY do not currently
+bypass the normal boundary to create
+an immediate early Qwen trigger.
+~~~
 
 Therefore:
 
-```text
-LOW_MOBILITY streak alone
-has warning value
-but poor specificity
-```
-
-Do not currently implement arbitrary thresholds such as:
-
-```text
-streak >= 3
-streak >= 5
-streak >= 8
-```
-
-### Current research axis
-
-Current next signal:
-
-```text
-reachable-space deterioration during LOW_MOBILITY episodes
-```
-
-Research question:
-
-```text
-Does reachable-space collapse provide earlier
-and more specific warning than LOW_MOBILITY duration alone?
-```
-
-PRE_TRAP remains:
-
-```text
-NOT IMPLEMENTED
-```
-
-Detailed experiment evidence:
-
-```text
-BENCHMARK_NOTES.md
-```
+~~~text
+Danger does NOT currently bypass
+the stagnation boundary.
+~~~
 
 ---
 
-## 14. Qwen High-Level Strategy Flow
+## 25. Qwen High-Level Strategy Flow
 
-Qwen strategy optimization remains event-driven.
+Qwen remains event-driven and high-level.
 
-Normal high-level triggers:
+Normal production triggers:
 
-```text
+~~~text
 LOOP_DETECTED
 STAGNATION_DETECTED
-```
+~~~
 
-Current implemented Qwen-selectable policies:
+Normal Qwen-selectable strategies currently center on:
 
-```text
+~~~text
 EAT_SAFE_FOOD
 SAFE_CHASE
 CREATE_SPACE
-```
+~~~
 
-Flow:
+Current flow:
 
-```text
+~~~text
 trigger
 → preserve failedStrategy
 → optimizeStrategy()
-→ prompt Qwen with local evidence
-→ validate strategy response
+→ provide local planner evidence
+→ Qwen selects high-level strategy/params
+→ validate response
 → create fresh ActiveStrategy
 → local TypeScript executes subsequent ticks
-```
+~~~
 
-Local evidence available to optimization includes:
+Local evidence includes:
 
-```text
+~~~text
 Food Path Exists
 Food Path Length
 Food Path Safe
 Food Path Reason
-```
+~~~
 
-Qwen response still includes:
+Current important limitation:
 
-```text
-policy
-foodWeight
-openSpaceWeight
-wallPenalty
-bodyPenalty
-recentVisitPenalty
-reason
-```
+~~~text
+Qwen does NOT currently consume:
 
-`LmStudioClient` validates:
+Hamiltonian admission
+Hamiltonian slack
+packing density
+perimeter reachability
+escapeAfterOneMove
+PREP state
+~~~
 
-```text
-implemented policy
-finite numeric params
-accepted numeric range
-bounded reason text
-```
-
-CREATE_SPACE integration path:
-
-```text
-prompt option
-→ LM response validator
-→ AgentController assignment
-→ local CREATE_SPACE executor
-```
-
-Status:
-
-```text
-code path:
-PASS
-
-CREATE_SPACE fixtures:
-PASS
-
-build:
-PASS
-
-natural normal-runtime Qwen selection:
-NOT YET CAPTURED
-```
-
-Qwen remains high-level only.
+Qwen currently does not select `HAMILTONIAN_SAFE`.
 
 ---
 
-## 15. Legacy Primitive Qwen Plan
+## 26. Legacy Primitive Qwen Plan
 
-Legacy path still exists:
+Legacy primitive plan path still exists:
 
-```text
+~~~text
 plannedMoves: Direction[]
 PlanResponse moves[1..6]
 replan()
 executePlannedMove()
-```
+~~~
 
 This is not the preferred healthy architecture path.
 
-It may still be reached when normal strategy flow has no usable ActiveStrategy/plan.
-
 Primitive Qwen moves still pass through:
 
-```text
+~~~text
 validateDirection()
-```
+~~~
 
-before physical execution.
+before execution.
 
-If Qwen primitive planning fails:
+If primitive planning fails:
 
-```text
+~~~text
 pickSafeDirection()
-```
+~~~
 
-may be used as fallback.
+may provide fallback.
 
-Telemetry such as:
-
-```text
-Plan Len
-Plan Left
-Moves/LLM
-```
-
-belongs to this legacy primitive-plan path.
-
-Do not reuse `plannedMoves` for normal local deterministic BFS paths unless telemetry semantics are intentionally redesigned.
-
-Fixed-policy benchmarks gate this Qwen path out.
+Do not redesign the architecture around primitive per-tick Qwen direction control.
 
 ---
 
-## 16. `runStep()` High-Level Runtime Flow
+## 27. `runStep()` High-Level Flow
 
-Normal:
+Normal call:
 
-```text
+~~~text
 runStep(undefined, 'DYNAMIC')
-```
+~~~
 
-Current flow:
+Current high-level flow:
 
-```text
+~~~text
 1. guard engine/running/pause/state
 
 2. compute legal moves
 
 3. assessDanger()
-   using current pre-move state
+   → dangerLevel
+   → legalMoveCount
+   → survivableMoveCount
+   → reachableCells
 
-4. feed:
-   dangerLevel
-   reachableCells
-   into DangerEpisodeTracker
+4. update DangerEpisodeTracker
 
 5. if no legal moves:
-   → NO_MOVE / game-over path
+   → game-over path
 
 6. if directionSource exists:
    → benchmark injection path
 
-7. else if activeStrategy exists:
+7. else if ActiveStrategy exists:
 
    EAT_SAFE_FOOD
    → evaluateFoodPath()
    → safe path[0]
-   → otherwise weighted local fallback
+   → otherwise StrategyExecutor fallback
 
    SAFE_CHASE
-   → weighted StrategyExecutor
+   → StrategyExecutor
 
    CREATE_SPACE
-   → exact uncapped space-first StrategyExecutor
+   → StrategyExecutor
+
+   HAMILTONIAN_SAFE
+   → StrategyExecutor
+   → current-state Hamiltonian admission guard
 
    candidate
    → validateDirection()
@@ -1290,224 +1576,55 @@ Current flow:
    → optimizeStrategy()
 
 9. otherwise when allowed:
-   → legacy primitive Qwen plan / replan / local fallback
-```
+   → legacy primitive Qwen plan / local fallback
+~~~
 
 ### Benchmark injection exception
 
 When `directionSource` is supplied:
 
-```text
-candidate
+~~~text
+directionSource(state)
 → engine.setDirection()
 → engine.step()
-```
+~~~
 
-This injected path does not follow the same normal:
+This injected path does not execute the full normal:
 
-```text
-SafetyLayer
+~~~text
 ActiveStrategy
+StrategyExecutor
+SafetyLayer
 LOOP
 progress
 stagnation
-```
+~~~
 
 lifecycle.
 
-Do not claim every local benchmark direction goes through SafetyLayer.
+Do not claim every benchmark-injected move represents normal production orchestration.
 
 ---
 
-## 17. Benchmarks / Experiment Evidence
+## 28. Benchmark / Debug API
 
-Detailed benchmark history:
+Ownership:
 
-```text
-BENCHMARK_NOTES.md
-```
-
-PROJECT_MAP keeps only architecture-relevant semantics.
-
-### runLocalBenchmark(seed, maxSteps, policy?)
-
-Without explicit policy:
-
-```text
-initial strategy = EAT_SAFE_FOOD
-_fixedPolicy = false
-existing adaptive benchmark behavior preserved
-```
-
-With explicit policy:
-
-```text
-_fixedPolicy = true
-Qwen disabled
-policy identity fixed
-SafetyLayer may still change immediate direction
-```
-
-Supported:
-
-```text
-EAT_SAFE_FOOD
-SAFE_CHASE
-CREATE_SPACE
-```
-
-Important:
-
-```text
-fixed policy ≠ fixed direction
-```
-
-Possible termination:
-
-```text
-ENGINE_GAME_OVER
-LOOP_DETECTED
-STAGNATION_DETECTED
-NO_MOVE
-MAX_STEPS
-```
-
-### runRecoveryBenchmark(seed, maxSteps, recoverySteps = 40)
-
-Benchmark-only lifecycle:
-
-```text
-fixed EAT_SAFE_FOOD
-→ first STAGNATION
-→ assign fresh CREATE_SPACE ActiveStrategy
-→ reset progress / trigger state
-→ run CREATE_SPACE for recoverySteps
-→ ignore repeated STAGNATION termination while recovery is active
-→ assign fresh EAT_SAFE_FOOD
-→ reset progress / trigger state
-→ continue
-```
-
-Only one recovery episode.
-
-Qwen is disabled for the whole run.
-
-Important implementation invariant:
-
-```text
-The recovery phase must change activeStrategy itself.
-
-A local phase label alone does not change the policy
-executed by runStep().
-```
-
-During active CREATE_SPACE recovery:
-
-```text
-STAGNATION_DETECTED does not prematurely terminate
-the benchmark before recoverySteps are exhausted.
-```
-
-This is benchmark-only behavior.
-
-Normal runtime does not automatically perform a fixed 40-step CREATE_SPACE recovery.
-
-### runSafeBfsBenchmark(seed, maxSteps)
-
-Uses `directionSource` benchmark injection.
-
-Therefore it is not apples-to-apples with fixed-policy `runLocalBenchmark()`.
-
-### Current benchmark conclusion
-
-```text
-EAT_SAFE_FOOD
-→ preferred current default
-
-SAFE_CHASE
-→ poor controlled fixed-policy performance
-
-CREATE_SPACE whole-run
-→ poor fit
-
-CREATE_SPACE 40-step STAGNATION recovery
-→ promising
-→ corrected runtime benchmark:
-   3/25 triggered
-   3/3 completed
-   3/3 improved
-   22/22 non-triggered cases identical to baseline
-→ sample remains small
-
-NO_MOVE
-→ unresolved failure class
-
-LOW_MOBILITY streak alone
-→ poor PRE_TRAP specificity
-
-reachable-space LOW_MOBILITY episode drop
-→ implemented
-→ BUILD PASS
-→ runtime evidence pending
-```
-
----
-
-## 18. Local Benchmark Danger Telemetry
-
-Current `LocalBenchmarkResult` exposes:
-
-```text
-maxLowMobilityStreak
-lastLowStreakBeforeDeadEnd
-deadEndEventCount
-maxLowMobilityReachableDrop
-lastLowMobilityReachableDropBeforeDeadEnd
-```
-
-These are observational research fields.
-
-They do not change:
-
-```text
-policy execution
-SafetyLayer semantics
-Qwen trigger semantics
-benchmark termination semantics
-```
-
-Current wiring:
-
-```text
-BUILD PASS
-```
-
-Runtime evidence for reachable-drop fields:
-
-```text
-PENDING
-```
-
----
-
-## 19. Debug API
-
-Source:
-
-```text
+~~~text
 src/main.ts
 src/global.d.ts
-```
+src/agent/agent-controller.ts
+~~~
 
-Global entrypoint:
+Global browser entrypoint:
 
-```text
+~~~text
 window.__snakeDebug
-```
+~~~
 
-Relevant methods:
+Relevant methods include:
 
-```text
+~~~text
 getState()
 setManualMode(enabled)
 setDirection(direction)
@@ -1516,13 +1633,37 @@ reset()
 getAgentInfo()
 setSeed(seed | null)
 restart()
+~~~
 
+Current `runLocalBenchmark()` high-level signature:
+
+~~~text
 runLocalBenchmark(
   seed,
   maxSteps,
   policy?
 )
+~~~
 
+Current normal benchmark policy argument is centered on:
+
+~~~text
+EAT_SAFE_FOOD
+SAFE_CHASE
+CREATE_SPACE
+~~~
+
+There is NO current:
+
+~~~text
+prepStartStep
+~~~
+
+There is NO current PREP runtime benchmark hook.
+
+Other benchmark methods include:
+
+~~~text
 runRecoveryBenchmark(
   seed,
   maxSteps,
@@ -1533,50 +1674,562 @@ runSafeBfsBenchmark(
   seed,
   maxSteps
 )
-```
+~~~
 
-Supported explicit benchmark policies:
+Important:
 
-```text
-EAT_SAFE_FOOD
-SAFE_CHASE
-CREATE_SPACE
-```
+~~~text
+window.__snakeDebug
+is a browser runtime API.
 
-Runtime `AgentInfo` may expose richer telemetry than the pushed global debug type declaration models.
-
-Do not assume:
-
-```text
-window.__snakeDebug.reset()
-```
-
-is identical to every internal controller-reset boundary.
-
-Use the intended benchmark initialization/fresh controller when telemetry isolation matters.
+Do not invoke it as though it were
+a PowerShell or Node global object.
+~~~
 
 ---
 
-## 20. UI / Thinking / Pause
+## 29. Current LocalBenchmarkResult
+
+Current production `LocalBenchmarkResult` contains:
+
+~~~text
+maxLowMobilityStreak
+lastLowStreakBeforeDeadEnd
+deadEndEventCount
+
+maxLowMobilityReachableDrop
+lastLowMobilityReachableDropBeforeDeadEnd
+~~~
+
+Current production source DOES NOT expose historical research fields such as:
+
+~~~text
+minHamiltonianSlack
+finalHamiltonianSlack
+
+firstAdmissibleStep
+firstAdmissibleScore
+firstAdmissionLostStep
+admissionRegainedCount
+admissibleTicks
+
+finalReachableFreeRatio
+reachableFreeRatioSnapshots
+
+perimeterReachableSnapshots
+escapeAfterOneMoveSnapshots
+packingDensitySnapshots
+
+maxLegalMoveDrop
+maxSurvivableMoveDrop
+maxReachableCellDrop
+maxReachableCellDropRatio
+
+prepStartSlack
+prepBestSlack
+prepAdmissionStep
+~~~
+
+Do not describe those as current benchmark API fields.
+
+---
+
+## 30. Historical Hamiltonian / PREP Research
+
+A larger local research branch previously added temporary telemetry and PREP wiring.
+
+Historical research concepts included:
+
+~~~text
+historical Hamiltonian minimum slack
+current-state Hamiltonian slack
+
+first admission
+first admission loss
+admission regain
+admissible ticks
+
+reachableFreeRatio
+perimeterReachable
+escapeAfterOneMove
+packingDensity
+
+per-tick Danger move/reachable drops
+
+prepStartStep
+prepStartSlack
+prepBestSlack
+prepAdmissionStep
+
+one-step greedy Hamiltonian PREP
+~~~
+
+These were experimental instruments.
+
+They were intentionally excluded from the clean production checkpoint `72ed55c`.
+
+Detailed seed evidence, if retained, belongs in:
+
+~~~text
+BENCHMARK_NOTES.md
+~~~
+
+not in current-runtime API descriptions.
+
+---
+
+## 31. Invalidated / Superseded Research Conclusions
+
+Several historical conclusions must not be treated as current architecture truth.
+
+### A. Historical minimum reused as current admission state
+
+An experimental benchmark accumulated:
+
+~~~text
+minHamiltonianSlack
+=
+minimum slack ever seen so far
+~~~
+
+Some later lifetime/regain telemetry reused that historical minimum as though it represented current state.
+
+Consequence:
+
+~~~text
+once historical minimum became negative
+it could never recover to non-negative
+~~~
+
+Therefore conclusions based on:
+
+~~~text
+admissionRegainedCount
+admissibleTicks
+full admission lifetime
+~~~
+
+were structurally misleading.
+
+Those fields were removed.
+
+### B. PREP objective mismatch
+
+The one-step PREP prototype and benchmark did not establish a sufficiently trustworthy equivalence between:
+
+~~~text
+the exact admission condition
+and
+the optimized experimental slack objective
+~~~
+
+Therefore:
+
+~~~text
+"0/4 proves Hamiltonian recovery is impossible"
+~~~
+
+is not accepted.
+
+At most:
+
+~~~text
+that specific prototype did not demonstrate
+successful admission recovery
+under the tested setup
+~~~
+
+### C. Perimeter / escape metric risk
+
+Experimental `perimeterReachable` instrumentation had a correctness risk in how visited/blocked cells interacted with perimeter detection.
+
+Therefore old perimeter/escape conclusions are not high-confidence production evidence.
+
+These metrics were removed from current source.
+
+---
+
+## 32. `bench-hamiltonian-prep.ts`
+
+Possible local untracked artifact:
+
+~~~text
+src/agent/bench-hamiltonian-prep.ts
+~~~
+
+Current status:
+
+~~~text
+NOT active production runtime
+
+NOT imported by current AgentController
+
+NOT a StrategyPolicy
+
+NOT part of checkpoint 72ed55c
+
+NOT automatically deleted
+because it is untracked research material
+~~~
+
+Do not list it in the active runtime object graph.
+
+If research is revisited, inspect current local status/source first.
+
+---
+
+## 33. Current Hamiltonian Research Question
+
+The main unresolved Hamiltonian problem is not:
+
+~~~text
+"Can we add more telemetry?"
+~~~
+
+The missing capability is:
+
+~~~text
+How can the snake reach or preserve
+Hamiltonian-compatible body ordering
+before switching to HAMILTONIAN_SAFE?
+~~~
+
+Current executor can follow the cycle when admission holds.
+
+Missing capability:
+
+~~~text
+reliable structural reorganization
+or
+another deterministic compatibility-transition mechanism
+~~~
+
+This remains a design/research problem.
+
+---
+
+## 34. Current Development Direction
+
+Keep two axes separate.
+
+### Axis A — deterministic capability
+
+Question:
+
+~~~text
+What reliable high-level tools can Qwen choose?
+~~~
+
+Current deterministic capabilities:
+
+~~~text
+EAT_SAFE_FOOD
+SAFE_CHASE
+CREATE_SPACE
+HAMILTONIAN_SAFE executor
+~~~
+
+Important missing capability:
+
+~~~text
+reliable structural reorganization /
+Hamiltonian compatibility recovery
+~~~
+
+Possible future research:
+
+~~~text
+multi-step structural reorganization
+
+tail-aware cycle-order repair
+
+state-space planning over body ordering
+
+another deterministic endgame transition method
+~~~
+
+These are design directions only.
+
+Do not assume a one-step greedy slack optimizer is the answer.
+
+### Axis B — Qwen objective switching
+
+Question:
+
+~~~text
+When should Qwen switch objectives?
+~~~
+
+Current production triggers:
+
+~~~text
+LOOP_DETECTED
+STAGNATION_DETECTED
+~~~
+
+Before wiring Hamiltonian into Qwen:
+
+~~~text
+the deterministic capability must be reliable
+
+the admission contract must be clear
+
+failure/fallback behavior must be defined
+~~~
+
+Do not expose dozens of experimental telemetry numbers to Qwen merely because they can be measured.
+
+---
+
+## 35. Desired High-Level Behavior
+
+Conceptual target:
+
+~~~text
+early game:
+→ efficiently pursue food
+
+when local structure becomes troublesome:
+→ reorganize / escape
+
+after successful reorganization:
+→ reassess
+
+if space remains generous:
+→ continue freer food pursuit
+
+if late-game structure genuinely requires conservation:
+→ prepare for conservative endgame behavior
+
+when Hamiltonian admission is valid:
+→ HAMILTONIAN_SAFE
+~~~
+
+Important:
+
+~~~text
+escape / CREATE_SPACE success
+≠
+automatic Hamiltonian switch
+~~~
+
+Desired target sequence:
+
+~~~text
+efficient free play
+→ structural reorganization when necessary
+→ verified current Hamiltonian admission
+→ HAMILTONIAN_SAFE
+~~~
+
+This is a design target.
+
+It is not fully implemented.
+
+---
+
+## 36. Recovery / Reorganization
+
+Current production local reorganization tool:
+
+~~~text
+CREATE_SPACE
+~~~
+
+Evidence:
+
+~~~text
+whole-run use:
+poor fit
+
+temporary recovery use:
+promising but limited
+~~~
+
+Hamiltonian-specific recovery:
+
+~~~text
+NOT SOLVED
+~~~
+
+Historical one-step PREP:
+
+~~~text
+research-only
+not production
+not retained in active runtime
+~~~
+
+Do not rename historical PREP experiments into a production feature.
+
+---
+
+## 37. Benchmark Lessons That Still Hold
+
+Broad lessons that remain architecture-relevant:
+
+~~~text
+EAT_SAFE_FOOD remains the preferred normal default.
+
+SAFE_CHASE is insufficient as the only long-run policy.
+
+Whole-run CREATE_SPACE is not a replacement for normal food pursuit.
+
+Temporary CREATE_SPACE recovery showed some promising evidence.
+
+NO_MOVE remains an unresolved failure class.
+
+LOW_MOBILITY streak alone is not a proven universal early trigger.
+
+More observational telemetry does not automatically improve Qwen decisions.
+
+A Hamiltonian executor is useful only if compatibility/admission can be reached and managed reliably.
+~~~
+
+Exact seed tables, scores, and step counts belong in:
+
+~~~text
+BENCHMARK_NOTES.md
+~~~
+
+---
+
+## 38. What Has NOT Been Proven
+
+Do not claim:
+
+~~~text
+Hamiltonian slack alone guarantees indefinite survival.
+
+Current admission guard proves all future food growth is safe.
+
+Qwen currently understands Hamiltonian admission.
+
+Qwen currently selects HAMILTONIAN_SAFE.
+
+Automatic Hamiltonian switching exists.
+
+Reliable HAMILTONIAN_PREP exists.
+
+The old one-step PREP experiment proves
+Hamiltonian recovery is impossible.
+
+reachableFreeRatio has a universal death threshold.
+
+packingDensity has a universal trigger threshold.
+
+perimeterReachable is a reliable death predictor.
+
+escapeAfterOneMove is a reliable trap predictor.
+
+Danger directly triggers Qwen.
+
+LOW_MOBILITY directly triggers Qwen.
+~~~
+
+---
+
+## 39. Known Current Limitations
+
+Not currently solved / production-integrated:
+
+~~~text
+Danger-based direct Qwen trigger
+LOW_MOBILITY direct trigger
+reachable-drop direct trigger
+PRE_TRAP trigger
+multi-step danger lookahead
+dedicated survival planner
+FOLLOW_TAIL
+ESCAPE policy
+
+automatic Hamiltonian transition
+Hamiltonian Qwen selection
+reliable Hamiltonian recovery/preparation
+
+formal board-full WIN semantics
+shared board-dimension source of truth
+~~~
+
+### Safe food
+
+~~~text
+heuristic
+not a long-term proof
+~~~
+
+### SAFE_CHASE
+
+~~~text
+one-step Greedy
+not survival planning
+~~~
+
+### CREATE_SPACE
+
+~~~text
+implemented
+poor whole-run fit
+limited positive recovery evidence
+~~~
+
+### NO_MOVE
+
+~~~text
+still unresolved
+~~~
+
+### Danger
+
+~~~text
+observational/contextual
+not direct Qwen trigger
+~~~
+
+### Hamiltonian
+
+~~~text
+cycle helper:
+IMPLEMENTED
+
+executor:
+IMPLEMENTED
+
+current-state admission guard:
+IMPLEMENTED
+
+automatic admission lifecycle:
+NOT IMPLEMENTED
+
+Qwen selection:
+NOT IMPLEMENTED
+
+compatibility recovery:
+NOT SOLVED
+~~~
+
+---
+
+## 40. UI / Thinking / Pause
 
 ### Thinking streaming
 
 LM Studio SSE reasoning path:
 
-```text
+~~~text
 choices[0].delta.reasoning_content
 → LmStudioClient callback
 → AgentController.currentInfo.thinking
 → updateUI()
 → AgentPanel.updateDisplay()
 → Thinking DOM
-```
+~~~
 
 Final response content:
 
-```text
+~~~text
 choices[0].delta.content
-```
+~~~
 
 Do not replace real thinking streaming with fake animation.
 
@@ -1584,315 +2237,73 @@ Do not replace real thinking streaming with fake animation.
 
 Visible flow:
 
-```text
+~~~text
 INITIAL
 → START AGENT
 → AGENT ACTIVE
 ↔ PAUSED
 → GAME OVER
 → RESTART AGENT
-```
+~~~
 
 AgentPanel owns the local async run loop.
 
-Pause protection exists in both:
+Pause protection exists in:
 
-```text
+~~~text
 AgentPanel scheduling
 AgentController runStep()
-```
+~~~
 
 An async Qwen response may finish while paused, but completion must not itself move the snake.
 
-### Active diagnostic UI
-
-Current UI includes fields such as:
-
-```text
-Last Trigger
-No Progress
-Live Stag
-Budget
-Food Dist
-Unique Heads
-Danger
-Mobility
-Reachable
-Mobility Streak
-Max Mobility Streak
-Last Low Streak Before Dead End
-Dead End Events
-```
-
-Trigger-time snapshots are distinct from live stagnation telemetry.
-
-Do not confuse historical trigger snapshot values with current live state.
-
 ---
 
-## 21. Revisit Awareness
+## 41. Revisit Awareness
 
 AgentController stores recent successful head positions.
 
 Current history length:
 
-```text
+~~~text
 32
-```
+~~~
 
-StrategyExecutor applies a recency-weighted penalty to candidate cells found in that history.
+StrategyExecutor applies a recency-weighted penalty to recently visited candidate cells.
 
 This is:
 
-```text
+~~~text
 a score penalty
-```
+~~~
 
 not:
 
-```text
+~~~text
 a hard ban
-```
+~~~
 
-Revisit awareness helps local Greedy behavior but does not replace:
+Revisit awareness does not replace:
 
-```text
+~~~text
 route planning
 survival planning
 escape planning
-```
+structural recovery
+~~~
 
 ---
 
-## 22. Current Known Limitations
-
-Not currently implemented:
-
-```text
-Danger-based Qwen trigger
-LOW_MOBILITY trigger
-reachable-drop trigger
-PRE_TRAP / SituationAssessment trigger
-multi-step danger lookahead
-dedicated survival planner
-FOLLOW_TAIL
-ESCAPE
-SAFE_CYCLE / Hamiltonian
-A*
-formal board-full WIN semantics
-full fixed GameSnapshot planner fixture suite
-```
-
-Important current limitations:
-
-### Safe food
-
-```text
-Safe food validation is heuristic,
-not a proof of survival.
-```
-
-### SAFE_CHASE
-
-```text
-one-step Greedy
-not survival planning
-```
-
-### CREATE_SPACE
-
-```text
-implemented
-poor as whole-run policy
-promising as temporary STAGNATION recovery
-```
-
-### Recovery evidence
-
-```text
-corrected runtime benchmark:
-3 actual STAGNATION recovery episodes
-3/3 completed
-3/3 improved
-
-22 non-triggered cases:
-identical to baseline
-
-promising
-but not broad proof
-```
-
-### NO_MOVE
-
-```text
-remains unresolved
-can occur before STAGNATION recovery
-```
-
-### Trigger timing
-
-Confirmed runtime evidence shows:
-
-```text
-death can occur while
-Last Trigger = -
-Live Stag is far below 80
-Qwen calls = 0
-```
-
-### Danger
-
-```text
-observational only
-```
-
-### Reachable-drop telemetry
-
-```text
-implemented
-BUILD PASS
-runtime evidence pending
-```
-
-### Board dimensions
-
-```text
-still duplicated between
-GameEngine-derived geometry
-and AgentController constants
-```
-
-### AgentController size
-
-`src/agent/agent-controller.ts` remains a large high-context orchestration file.
-
-Further extraction should be incremental.
-
-Do not split it broadly only to reduce line count.
-
----
-
-## 23. Current Development Direction
-
-Keep these two axes separate.
-
-```text
-A. Capability
-What high-level deterministic tools can Qwen select?
-
-B. Trigger / Situation Assessment
-When should Qwen be asked to select again?
-```
-
-Do not normally add a new policy and new trigger in the same experiment.
-
-### Completed capability
-
-```text
-EAT_SAFE_FOOD
-SAFE_CHASE
-CREATE_SPACE
-```
-
-### Current research
-
-```text
-death-window / reachable-space deterioration telemetry
-```
-
-Question:
-
-```text
-Can we detect a repeatable pre-trap state early enough
-for a strategy change to matter?
-```
-
-### After evidence
-
-Potential next work:
-
-```text
-PRE_TRAP / SituationAssessment
-FOLLOW_TAIL
-ESCAPE
-SAFE_CYCLE / Hamiltonian
-```
-
-Recommended order is evidence-driven rather than fixed if new runtime evidence changes priorities.
-
----
-
-## 24. AgentController Decomposition Direction
-
-AgentController remains:
-
-```text
-the orchestration layer
-```
-
-It should keep responsibilities such as:
-
-```text
-runtime flow
-strategy lifecycle
-Qwen high-level decision flow
-SafetyLayer integration
-trigger coordination
-```
-
-Cohesive self-contained state machines/algorithms may move into owned helpers.
-
-Completed example:
-
-```text
-DangerEpisodeTracker
-```
-
-Current pattern:
-
-```text
-AgentController
-→ owns helper
-→ passes current evidence
-→ consumes helper snapshot
-```
-
-Preferred future extraction rule:
-
-```text
-one cohesive responsibility
-→ focused audit
-→ focused extraction
-→ BUILD PASS
-→ STOP
-```
-
-Do not perform a broad multi-module rewrite.
-
-Likely future extraction candidate:
-
-```text
-benchmark-specific lifecycle / harness
-```
-
-but only after a focused coupling audit.
-
-The recent recovery benchmark bug confirms that benchmark lifecycle code
-is behaviorally meaningful and should not be treated as disposable test glue.
-
-Loop/stagnation trigger lifecycle is more coupled and should not be the first broad extraction target.
-
----
-
-## 25. Fast File Guide
+## 42. Fast File Guide
 
 | Task | Read first |
 | --- | --- |
 | Bootstrap / debug API / canvas | `src/main.ts`, `src/global.d.ts` |
 | Engine / collision / RNG | `src/game/engine.ts`, `src/game/types.ts` |
-| Agent orchestration / triggers | `src/agent/agent-controller.ts` |
+| Agent orchestration / triggers / benchmarks | `src/agent/agent-controller.ts` |
 | Strategy policy types | `src/agent/types.ts` |
-| SAFE_CHASE / CREATE_SPACE | `src/agent/strategy-executor.ts` |
+| SAFE_CHASE / CREATE_SPACE / HAMILTONIAN_SAFE execution | `src/agent/strategy-executor.ts` |
+| Hamiltonian cycle/index/direction | `src/agent/hamiltonian-cycle-32x12.ts` |
 | Immediate legality | `src/agent/safety-layer.ts` |
 | BFS planner | `src/agent/path-planner.ts` |
 | Virtual simulation | `src/agent/snake-simulator.ts` |
@@ -1901,233 +2312,316 @@ Loop/stagnation trigger lifecycle is more coupled and should not be the first br
 | Cross-tick Danger episodes | `src/agent/danger-episode-tracker.ts` |
 | Stagnation budget | `src/agent/stagnation-budget.ts` |
 | LM strategy/SSE validation | `src/agent/lm-studio-client.ts` |
-| Qwen assignment/runtime flow | `src/agent/agent-controller.ts` |
 | Active UI | `src/agent-panel.ts` |
 | Active styling | `src/style.css` |
 | Canvas rendering | `src/game/renderer.ts` |
 | Benchmark evidence | `BENCHMARK_NOTES.md` |
-| OpenCode/Git workflow | `AGENTS.md` |
+| OpenCode / Git workflow | `AGENTS.md` |
 
 For `agent-controller.ts`:
 
-```text
+~~~text
 locate exact symbol
 → narrow read
-```
+~~~
 
-Do not full-read it for a narrow task unless genuinely necessary.
+Do not broad-read the whole file for a narrow task unless genuinely necessary.
 
 ---
 
-## 26. Documentation Ownership
+## 43. Documentation Ownership
 
 ### PROJECT_MAP.md
 
 Owns:
 
-```text
+~~~text
 current architecture
 active files
 runtime ownership
 strategy semantics
 trigger semantics
 important engine behavior
-benchmark API semantics
+Hamiltonian production architecture
+current benchmark/debug API semantics
 current limitations
-research direction
-```
+production vs research-only boundaries
+current development direction
+~~~
 
 ### BENCHMARK_NOTES.md
 
 Owns:
 
-```text
+~~~text
 seed-level benchmark evidence
 scores
 step counts
 recovery deltas
-death-window experiment results
-experimental comparisons that remain relevant
-```
+death-window experiments
+historical Hamiltonian admission tests
+historical PREP experiment results
+experimental comparisons
+invalidated measurement notes
+~~~
 
-Invalidated benchmark conclusions should be replaced by corrected evidence rather than retained as active evidence.
+Do not overload PROJECT_MAP with every seed row.
 
 ### AGENTS.md
 
 Owns:
 
-```text
+~~~text
 OpenCode workflow
-session discipline
+NEW / SAME session discipline
 context discipline
 Git safety
 PowerShell rules
-build/test operating rules
-```
-
-Do not duplicate large sections across all three documents.
+build/test/runtime evidence rules
+~~~
 
 ---
 
-## 27. PROJECT_MAP Renewal Policy
+## 44. PROJECT_MAP Renewal Policy
 
 Update PROJECT_MAP when changes affect:
 
-```text
+~~~text
 active runtime ownership
 new modules
 strategy policies
-AgentController runtime flow
+AgentController flow
 Qwen responsibilities
 SafetyLayer responsibility
 GameEngine semantics
 LOOP / stagnation semantics
 Danger semantics
-Danger episode ownership
-PRE_TRAP semantics
+Hamiltonian semantics
 planner architecture
-benchmark/debug API semantics
-active-vs-legacy ownership
+benchmark/debug API
+production vs research-only ownership
 major telemetry ownership
-```
+~~~
 
-Usually do not update it for:
+Usually do not update for:
 
-```text
+~~~text
 font tweaks
 padding
-small colors
-minor layout cosmetics
-small copy changes
-```
+colors
+minor copy
+small cosmetic UI work
+~~~
 
-Renew when roughly:
+Renew when:
 
-```text
-2–4 meaningful architecture changes accumulate
+~~~text
+~2–4 meaningful architecture changes accumulate
+
 or
+
 a fresh consumer would be materially misled
+
 or
+
 before an important architecture checkpoint/handoff
-```
-
-Detailed benchmark results should go to:
-
-```text
-BENCHMARK_NOTES.md
-```
-
-Workflow-rule changes should go to:
-
-```text
-AGENTS.md
-```
+~~~
 
 ---
 
-## 28. High-Confidence Anchors
+## 45. Git / Checkpoint State
 
-```text
+Previously verified pushed checkpoints:
+
+~~~text
+architecture source:
+6f0c8eb
+
+documentation:
+4a1415e
+~~~
+
+Current local production source checkpoint:
+
+~~~text
+72ed55c
+Add Hamiltonian-safe strategy foundation
+~~~
+
+Current checkpoint contents:
+
+~~~text
+src/agent/hamiltonian-cycle-32x12.ts
+src/agent/strategy-executor.ts
+src/agent/types.ts
+~~~
+
+Build:
+
+~~~text
+PASS
+~~~
+
+Push status:
+
+~~~text
+NOT YET VERIFIED
+~~~
+
+Current tracked working-tree state before this PROJECT_MAP renewal was being cleaned so that architecture/research formatting churn would not enter the source checkpoint.
+
+Known untracked research/temporary artifacts may include:
+
+~~~text
+agent-controller-head.ts
+
+benchmark JSON outputs
+
+screenshots
+
+visual-review artifacts
+
+qwen-test.js
+
+agent_test_controls.md
+
+src/agent/bench-hamiltonian-prep.ts
+
+legacy duplicate UI/client files
+~~~
+
+Do not stage them automatically.
+
+Before docs commit:
+
+~~~text
+git status --short
+
+git add PROJECT_MAP.md
+
+git diff --cached --stat
+
+git diff --cached -- PROJECT_MAP.md
+~~~
+
+Do not use casually:
+
+~~~text
+git add .
+git add -A
+git reset --hard
+git clean -fd
+git restore .
+~~~
+
+After push:
+
+~~~text
+verify latest GitHub main
+~~~
+
+---
+
+## 46. High-Confidence Anchors
+
+~~~text
 Repository:
 https://github.com/spiraleyeld/ai-snake-game-agent
 
 Local:
 D:\Projects\snake-game
 
-Latest pushed architecture source checkpoint:
+Previously verified pushed architecture checkpoint:
 6f0c8eb
 
-Latest pushed documentation checkpoint:
+Previously verified pushed documentation checkpoint:
 4a1415e
+
+Current local production source checkpoint:
+72ed55c
+
+Current local checkpoint push status:
+NOT VERIFIED
 
 Frontend:
 Vanilla TypeScript + Vite + Canvas 2D
 
-Canvas:
-640×240
-
-Grid:
-20 px
-
 Board:
 32×12 / 384 cells
 
-Agent constants:
-COLS = 32
-ROWS = 12
-
-Default policy:
+Default normal policy:
 EAT_SAFE_FOOD
 
-Implemented policies:
+Normal production Qwen policy set:
 EAT_SAFE_FOOD
 SAFE_CHASE
 CREATE_SPACE
 
-CREATE_SPACE:
-implemented
-exact uncapped reachable-space primary
-food-progress tie-break
-deterministic
-
-CREATE_SPACE whole-run:
-poor fit
-
-CREATE_SPACE STAGNATION recovery:
-promising
-corrected benchmark semantics
-3/25 triggered
-3/3 completed
-3/3 improved
-22/22 non-triggered identical
-sample still small
-
-Recovery benchmark:
-first STAGNATION
-→ fresh CREATE_SPACE ActiveStrategy
-→ 40-step recovery
-→ repeated STAGNATION ignored during recovery
-→ fresh EAT_SAFE_FOOD
-
-DangerMonitor:
-src/agent/danger-monitor.ts
-pure single-tick assessment
-
-DangerEpisodeTracker:
-src/agent/danger-episode-tracker.ts
-cross-tick Danger episode state
-implemented/pushed
-
-Reachable-drop telemetry:
-implemented/pushed
-BUILD PASS
-runtime evidence pending
+Type/executor support also includes:
+HAMILTONIAN_SAFE
 
 Qwen normal triggers:
 LOOP_DETECTED
 STAGNATION_DETECTED
 
-Danger trigger Qwen:
-NO
-
-LOW_MOBILITY trigger:
-NO
-
-Reachable-drop trigger:
+Danger-triggered Qwen:
 NO
 
 PRE_TRAP:
 NOT IMPLEMENTED
 
-Current trigger problem:
-real runtime death observed before
-LOOP/STAGNATION summoned Qwen
+Hamiltonian cycle helper:
+IMPLEMENTED
+
+Hamiltonian mapping/topology repair:
+PASS
+
+Hamiltonian executor:
+IMPLEMENTED
+
+Hamiltonian executor admission:
+minSlack >= 0
+AND
+cycleDir is immediately legal
+
+Hamiltonian admission failure:
+return null
+
+Hamiltonian arbitrary legal[0] fallback:
+NO
+
+Automatic Hamiltonian switching:
+NO
+
+Qwen HAMILTONIAN_SAFE selection:
+NO
+
+Hamiltonian benchmark telemetry in AgentController:
+NO
+
+PREP runtime hook:
+NO
+
+Current prepStartStep API:
+NO
+
+Reliable Hamiltonian recovery:
+NOT SOLVED
+
+perimeterReachable current production telemetry:
+NO
+
+escapeAfterOneMove current production telemetry:
+NO
+
+per-tick Danger drop research telemetry:
+NO
 
 Qwen role:
 high-level strategy / exception reasoning
 
-Local TypeScript role:
-deterministic per-tick execution
+Local TypeScript:
+deterministic execution
 
 SafetyLayer:
 immediate legality
@@ -2140,22 +2634,18 @@ src/agent-panel.ts
 src/style.css
 src/main.ts
 
-Legacy primitive Qwen moves:
-fallback path
-not healthy primary architecture
-
 Detailed benchmark evidence:
 BENCHMARK_NOTES.md
 
 OpenCode workflow:
 AGENTS.md
-```
+~~~
 
 ---
 
 # Core Principle
 
-```text
+~~~text
 Qwen decides high-level strategy.
 
 Local TypeScript executes deterministic navigation
@@ -2164,17 +2654,38 @@ and local safety reasoning.
 SafetyLayer validates immediate legality.
 
 GameEngine owns physical state transitions.
-```
+~~~
 
-Target architecture:
+Current strategic lesson:
 
-```text
-Qwen chooses what objective matters now.
-Local deterministic systems decide how to execute it safely.
-```
+~~~text
+More telemetry does not automatically make Qwen smarter.
 
-`AgentController` remains the orchestration layer.
+Qwen becomes more useful when it can choose among
+reliable deterministic capabilities.
 
-Cohesive deterministic state machines may live in focused helper modules.
+Therefore:
 
-Do not regress Qwen into normal per-tick primitive direction control.
+build trustworthy capabilities first,
+then expose the right high-level choice to Qwen.
+~~~
+
+Current target:
+
+~~~text
+efficient free play
+→ structural reorganization when needed
+→ verified Hamiltonian-compatible current state
+→ HAMILTONIAN_SAFE
+~~~
+
+The missing core capability is:
+
+~~~text
+reliable multi-step structural reorganization /
+Hamiltonian compatibility recovery
+~~~
+
+Do not promote failed or invalidated research heuristics into production architecture.
+
+Do not regress Qwen into normal per-tick primitive control.
