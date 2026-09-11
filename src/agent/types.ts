@@ -72,7 +72,7 @@ export interface StrategyUpdateResponse {
   thinking?: string;
 }
 
-export type StrategyPolicy = 'SAFE_CHASE' | 'EAT_SAFE_FOOD' | 'CREATE_SPACE';
+export type StrategyPolicy = 'SAFE_CHASE' | 'EAT_SAFE_FOOD' | 'CREATE_SPACE' | 'HAMILTONIAN_SAFE';
 
 export interface ActiveStrategyParams {
   foodWeight: number;

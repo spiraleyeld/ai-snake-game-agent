@@ -1,6 +1,7 @@
 import type { Direction } from './types.js';
 import type { ActiveStrategy } from './types.js';
 import { getLegalMoves } from './safety-layer.js';
+import { getNextDirection, getCellCycleIndex, CYCLE_LENGTH } from './hamiltonian-cycle-32x12.js';
 
 export function nextMove(
   headX: number,
@@ -55,6 +56,27 @@ export function nextMove(
     }
 
     return bestDir;
+  }
+
+  // HAMILTONIAN_SAFE: follow the precomputed Hamiltonian cycle
+  if (strategy.policy === 'HAMILTONIAN_SAFE') {
+    const headIdx = getCellCycleIndex(headX, headY);
+
+    let minSlack = Infinity;
+    for (let j = 1; j < snakeBody.length; j++) {
+      const segIdx = getCellCycleIndex(snakeBody[j].x, snakeBody[j].y);
+      if (segIdx >= 0 && headIdx >= 0) {
+        const d_j = (segIdx - headIdx + CYCLE_LENGTH) % CYCLE_LENGTH;
+        const slack_j = d_j - (snakeBody.length - j);
+        if (slack_j < minSlack) {
+          minSlack = slack_j;
+        }
+      }
+    }
+
+    const cycleDir = getNextDirection(headX, headY);
+    if (minSlack >= 0 && legal.includes(cycleDir)) return cycleDir;
+    return null;
   }
 
   const params = strategy.params;
